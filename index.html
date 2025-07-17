@@ -60,15 +60,19 @@
   </div>
 </div>
 <script type="module">
-/* ---------- CONFIG ---------- */
+/* -------------------------------------------------- */
+/*  CONFIG                                            */
+/* -------------------------------------------------- */
 const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
 
-/* ---------- HELPERS ---------- */
+/* -------------------------------------------------- */
+/*  HELPERS                                           */
+/* -------------------------------------------------- */
 const dbg    = document.getElementById("debug");
 const banner = document.getElementById("status");
-function log(m){
-  dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${m}`;
+function log(msg){
+  dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
   dbg.scrollTop    = dbg.scrollHeight;
 }
 function show(msg, ok){
@@ -77,16 +81,22 @@ function show(msg, ok){
   banner.classList.remove("hidden");
   setTimeout(()=>banner.classList.add("hidden"), 3000);
 }
-window.addEventListener("unhandledrejection", e => log("⚠️  " + e.reason));
+window.addEventListener("unhandledrejection", e =>
+  log("⚠️  " + (e.reason?.message || e.reason))
+);
 
-/* ---------- CLIENT ---------- */
+/* -------------------------------------------------- */
+/*  SUPABASE CLIENT                                   */
+/* -------------------------------------------------- */
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const sb = createClient(URL, KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
 });
 log("✅ Supabase client ready");
 
-/* ---------- ELEMENTS ---------- */
+/* -------------------------------------------------- */
+/*  DOM REFERENCES                                    */
+/* -------------------------------------------------- */
 const loginSec = document.getElementById("loginSection");
 const userSec  = document.getElementById("userSection");
 const loginBtn = document.getElementById("loginBtn");
@@ -97,13 +107,16 @@ const noteTxt  = document.getElementById("noteText");
 const list     = document.getElementById("notesList");
 const userInfo = document.getElementById("userInfo");
 
+/* -------------------------------------------------- */
+/*  STATE + UI                                        */
+/* -------------------------------------------------- */
 let currentUser = null;
 function updateUI(){
-  if (currentUser){
+  if(currentUser){
     loginSec.classList.add("hidden");
     userSec.classList.remove("hidden");
     userInfo.textContent = `Logged in as ${currentUser.email}`;
-  } else {
+  }else{
     userSec.classList.add("hidden");
     loginSec.classList.remove("hidden");
     userInfo.textContent = "";
@@ -112,40 +125,41 @@ function updateUI(){
   }
 }
 
-/* ---------- SAFE WRAPPER ---------- */
+/* -------------------------------------------------- */
+/*  HELPER: safe wrapper with 8‑s timeout & token‑refresh */
+/* -------------------------------------------------- */
 async function safe(label, fn){
   const ctrl = new AbortController();
-  const t    = setTimeout(() => ctrl.abort(), 8000);   // 8‑s timeout
+  const t    = setTimeout(() => ctrl.abort(), 8000);
   try{
     let { data, error } = await fn(ctrl.signal);
-    if (error?.status === 401){                       // token expired race
-      log("🔄 token expired; refreshing");
+    if(error?.status === 401){
       await sb.auth.refreshSession();
       ({ data, error } = await fn(ctrl.signal));
     }
-    if (error) throw error;
+    if(error) throw error;
     return data;
   }catch(e){
     log(`❌ ${label}: ${e.message}`);
-    show(e.message, false);
-  }finally{
-    clearTimeout(t);
-  }
+    show(e.message,false);
+  }finally{ clearTimeout(t); }
 }
 
-/* ---------- LOAD & SAVE ---------- */
+/* -------------------------------------------------- */
+/*  NOTE OPERATIONS                                   */
+/* -------------------------------------------------- */
 async function loadNotes(){
   log("🔄 loadNotes()");
   const rows = await safe("loadNotes", signal =>
     sb.from("notes")
       .select("*", { signal })
       .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending:false })
   );
-  if (!rows) return;
+  if(!rows) return;
 
   list.innerHTML = "";
-  rows.forEach(r => {
+  rows.forEach(r=>{
     const div = document.createElement("div");
     div.className = "note";
     div.innerHTML = `
@@ -157,66 +171,61 @@ async function loadNotes(){
 }
 
 async function saveNote(){
-  const txt = noteTxt.value.trim();
-  if (!txt){ show("Write something!", false); return; }
-
+  const text = noteTxt.value.trim();
+  if(!text){ show("Write something!",false); return; }
   await safe("insert", signal =>
     sb.from("notes")
-      .insert({ user_id: currentUser.id, content: txt }, { signal })
+      .insert({ user_id: currentUser.id, content: text }, { signal })
       .select()
   );
   noteTxt.value = "";
-  show("Saved", true);
+  show("Saved",true);
   await loadNotes();
 }
 
-/* ---------- EVENTS ---------- */
+/* -------------------------------------------------- */
+/*  EVENT HANDLERS                                    */
+/* -------------------------------------------------- */
 loginBtn.onclick = () =>
   sb.auth.signInWithOAuth({
     provider: "google",
-    options : { redirectTo: location.href }   // original behaviour
+    options : { redirectTo: location.href }   // keep original behaviour
   });
 
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
 
-  /* Strip any hash (# or #access_token…) right away */
-  if (location.hash){
-    history.replaceState({}, "", location.href.split("#")[0]);
-    log("🔧 hash removed immediately");
-  }
-
   const { error } = await sb.auth.signOut();
-  if (error){ show(error.message, false); return; }
+  if(error){ show(error.message,false); return; }
 
-  /* fallback: clear session manually if event is missed */
-  setTimeout(async () => {
-    const { data } = await sb.auth.getSession();
-    if (data.session) sb.auth.setSession(null);
-  }, 2000);
+  /* Always reload at clean URL (removes # or #token) */
+  window.location.replace(location.origin + location.pathname);
 };
 
 saveBtn.onclick = saveNote;
 pingBtn.onclick = () => safe("ping", signal =>
-  sb.from("notes").select("id", { head: true, signal }).limit(1)
+  sb.from("notes").select("id",{head:true,signal}).limit(1)
 );
 
-/* ---------- AUTH LISTENER ---------- */
+/* -------------------------------------------------- */
+/*  AUTH LISTENER                                     */
+/* -------------------------------------------------- */
 sb.auth.onAuthStateChange(async (ev, sess) => {
   log("📢 " + ev);
   currentUser = sess?.user || null;
   updateUI();
-  if (currentUser && ev !== "SIGNED_OUT") await loadNotes();
+  if(currentUser && ev !== "SIGNED_OUT") await loadNotes();
 });
 
-/* ---------- FIRST LOAD ---------- */
-const { data: { session } } = await sb.auth.getSession();
+/* -------------------------------------------------- */
+/*  FIRST LOAD                                        */
+/* -------------------------------------------------- */
+const { data:{ session } } = await sb.auth.getSession();
 currentUser = session?.user || null;
 updateUI();
-if (currentUser) await loadNotes();
+if(currentUser) await loadNotes();
 log("✅ initial session ready");
 </script>
-
 
 </body>
 </html>
