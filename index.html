@@ -251,6 +251,7 @@
             const notesList = document.getElementById('notesList');
             
             let currentUser = null;
+            let offlineNotes = []; // Store notes locally when database is down
             
             // Login button click
             loginBtn.addEventListener('click', async function() {
@@ -442,6 +443,40 @@
                 log('=== SAVE PROCESS COMPLETE ===');
             });
             
+            // Function to display notes (combines database + offline)
+            function displayNotes() {
+                log('Displaying notes...');
+                notesList.innerHTML = '';
+                
+                if (offlineNotes.length === 0) {
+                    notesList.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">No notes yet. Write your first note above!</div>';
+                    return;
+                }
+                
+                offlineNotes.forEach((note, index) => {
+                    const noteItem = document.createElement('div');
+                    noteItem.className = 'note-item';
+                    
+                    if (note.offline) {
+                        noteItem.style.borderLeft = '4px solid #ffc107';
+                        noteItem.style.backgroundColor = '#fff3cd';
+                    }
+                    
+                    const noteMeta = document.createElement('div');
+                    noteMeta.className = 'note-meta';
+                    noteMeta.textContent = `${note.offline ? '📱 Offline - ' : ''}Saved: ${new Date(note.created_at).toLocaleString()}`;
+                    
+                    const noteContent = document.createElement('div');
+                    noteContent.className = 'note-content';
+                    noteContent.textContent = note.content;
+                    
+                    noteItem.appendChild(noteMeta);
+                    noteItem.appendChild(noteContent);
+                    notesList.appendChild(noteItem);
+                });
+                
+                log(`Displayed ${offlineNotes.length} notes`);
+            }
             // Function to load and display notes
             async function loadNotes() {
                 log('=== LOADING NOTES ===');
@@ -451,61 +486,29 @@
                     return;
                 }
                 
-                log(`Loading notes for user: ${currentUser.id}`);
-                
                 try {
-                    const response = await supabase
-                        .from('notes')
-                        .select('*')
-                        .eq('user_id', currentUser.id)
-                        .order('created_at', { ascending: false });
-                    
-                    log(`Load response: ${JSON.stringify(response)}`);
+                    // Try to load from database with short timeout
+                    const response = await Promise.race([
+                        supabase.from('notes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Load timeout')), 3000))
+                    ]);
                     
                     if (response.error) {
-                        log(`Load notes error: ${response.error.message}`);
-                        log(`Error details: ${JSON.stringify(response.error)}`);
-                        showStatus(`Failed to load notes: ${response.error.message}`, 'error');
-                        return;
+                        throw new Error(response.error.message);
                     }
                     
-                    const data = response.data;
-                    log(`Found ${data ? data.length : 0} notes`);
+                    // Merge database notes with offline notes
+                    const dbNotes = response.data || [];
+                    offlineNotes = [...offlineNotes, ...dbNotes];
                     
-                    notesList.innerHTML = '';
+                    log(`Loaded ${dbNotes.length} notes from database`);
                     
-                    if (data && data.length > 0) {
-                        log('Displaying notes...');
-                        data.forEach((note, index) => {
-                            log(`Note ${index}: ${note.content.substring(0, 50)}...`);
-                            
-                            const noteItem = document.createElement('div');
-                            noteItem.className = 'note-item';
-                            
-                            const noteMeta = document.createElement('div');
-                            noteMeta.className = 'note-meta';
-                            noteMeta.textContent = `Saved: ${new Date(note.created_at).toLocaleString()}`;
-                            
-                            const noteContent = document.createElement('div');
-                            noteContent.className = 'note-content';
-                            noteContent.textContent = note.content;
-                            
-                            noteItem.appendChild(noteMeta);
-                            noteItem.appendChild(noteContent);
-                            notesList.appendChild(noteItem);
-                        });
-                        
-                        log(`Successfully displayed ${data.length} notes`);
-                    } else {
-                        log('No notes found - showing empty message');
-                        notesList.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">No notes yet. Write your first note above!</div>';
-                    }
                 } catch (err) {
-                    log(`Load notes exception: ${err.message}`);
-                    log(`Exception stack: ${err.stack}`);
-                    showStatus(`Error loading notes: ${err.message}`, 'error');
+                    log(`Database load failed: ${err.message}`);
+                    log('Using offline notes only');
                 }
                 
+                displayNotes();
                 log('=== LOAD NOTES COMPLETE ===');
             }
             supabase.auth.onAuthStateChange(async (event, session) => {
