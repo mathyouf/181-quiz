@@ -1,8 +1,4 @@
-// Form submission handler
-        notesForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveNote();
-        });<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -234,12 +230,11 @@
         <h1>📝 My Notes</h1>
         
         <div class="setup-message">
-            <h3>Setup Complete!</h3>
+            <h3>Debug Mode Active</h3>
             <p>✅ Supabase credentials configured!</p>
             <p>✅ Configured for GitHub Pages: https://mathyouf.github.io/181-quiz/</p>
-            <p>📋 Make sure you've updated:</p>
-            <p>1. Google Cloud Console redirect URIs</p>
-            <p>2. Supabase Site URL to: <code>https://mathyouf.github.io</code></p>
+            <p>🔍 Click "Sign in with Google" to see detailed error messages</p>
+            <p>📋 The app will now show what's happening when you try to sign in</p>
         </div>
 
         <div class="auth-section">
@@ -449,54 +444,17 @@
             saveNote();
         });
 
-        // Initialize DOM elements and start the app
-        function initializeApp() {
-            // Check if Supabase is loaded
-            if (!window.supabase) {
-                console.error('Supabase library not loaded');
-                setTimeout(initializeApp, 100); // Retry after 100ms
-                return;
+        // Listen for auth changes
+        supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                handleAuthSuccess(session.user);
+            } else if (event === 'SIGNED_OUT') {
+                handleAuthLogout();
             }
+        });
 
-            // Initialize Supabase client
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-            // Get DOM elements
-            loginSection = document.getElementById('loginSection');
-            userSection = document.getElementById('userSection');
-            notesSection = document.getElementById('notesSection');
-            userAvatar = document.getElementById('userAvatar');
-            userEmail = document.getElementById('userEmail');
-            noteContent = document.getElementById('noteContent');
-            notesForm = document.getElementById('notesForm');
-            saveBtn = document.getElementById('saveBtn');
-            statusMessage = document.getElementById('statusMessage');
-
-            // Form submission handler
-            notesForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                saveNote();
-            });
-
-            // Listen for auth changes
-            supabase.auth.onAuthStateChange((event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    handleAuthSuccess(session.user);
-                } else if (event === 'SIGNED_OUT') {
-                    handleAuthLogout();
-                }
-            });
-
-            // Check authentication on page load
-            checkAuth();
-        }
-
-        // Wait for DOM to be ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeApp);
-        } else {
-            initializeApp();
-        }
+        // Check authentication on page load
+        checkAuth();
     </script>
 </body>
 </html>
