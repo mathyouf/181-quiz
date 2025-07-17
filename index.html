@@ -134,6 +134,37 @@
         .hidden {
             display: none;
         }
+
+        #notesHistory {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #dee2e6;
+        }
+
+        #notesHistory h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .note-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .note-meta {
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 8px;
+        }
+
+        .note-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
     </style>
 </head>
 <body>
@@ -161,6 +192,11 @@
             
             <textarea id="noteText" placeholder="Write your note here..."></textarea>
             <button id="saveBtn" class="btn btn-save">💾 Save Note</button>
+            
+            <div id="notesHistory">
+                <h3>📚 Your Notes History</h3>
+                <div id="notesList"></div>
+            </div>
         </div>
     </div>
 
@@ -210,6 +246,7 @@
             const userAvatar = document.getElementById('userAvatar');
             const userEmail = document.getElementById('userEmail');
             const noteText = document.getElementById('noteText');
+            const notesList = document.getElementById('notesList');
             
             let currentUser = null;
             
@@ -242,13 +279,32 @@
             
             // Logout button
             logoutBtn.addEventListener('click', async function() {
-                log('Logout clicked');
-                await supabase.auth.signOut();
+                log('Logout button clicked');
+                try {
+                    showStatus('Signing out...', 'success');
+                    const { error } = await supabase.auth.signOut();
+                    if (error) {
+                        log(`Logout error: ${error.message}`);
+                        showStatus(`Logout failed: ${error.message}`, 'error');
+                    } else {
+                        log('Successfully signed out');
+                        showStatus('Signed out successfully', 'success');
+                    }
+                } catch (err) {
+                    log(`Logout exception: ${err.message}`);
+                    showStatus(`Logout error: ${err.message}`, 'error');
+                }
             });
             
             // Save note button
             saveBtn.addEventListener('click', async function() {
                 if (!currentUser) return;
+                
+                const noteContent = noteText.value.trim();
+                if (!noteContent) {
+                    showStatus('Please write something first!', 'error');
+                    return;
+                }
                 
                 log('Saving note...');
                 showStatus('Saving...', 'success');
@@ -256,9 +312,10 @@
                 try {
                     const { error } = await supabase
                         .from('notes')
-                        .upsert({
+                        .insert({
                             user_id: currentUser.id,
-                            content: noteText.value,
+                            content: noteContent,
+                            created_at: new Date().toISOString(),
                             updated_at: new Date().toISOString()
                         });
                     
@@ -268,6 +325,8 @@
                     } else {
                         log('Note saved successfully');
                         showStatus('Note saved!', 'success');
+                        noteText.value = ''; // Clear the input
+                        loadNotes(); // Reload the notes list
                     }
                 } catch (err) {
                     log(`Save exception: ${err.message}`);
@@ -275,7 +334,50 @@
                 }
             });
             
-            // Handle auth state changes
+            // Function to load and display notes
+            async function loadNotes() {
+                if (!currentUser) return;
+                
+                try {
+                    const { data, error } = await supabase
+                        .from('notes')
+                        .select('*')
+                        .eq('user_id', currentUser.id)
+                        .order('created_at', { ascending: false });
+                    
+                    if (error) {
+                        log(`Load notes error: ${error.message}`);
+                        return;
+                    }
+                    
+                    notesList.innerHTML = '';
+                    
+                    if (data && data.length > 0) {
+                        data.forEach(note => {
+                            const noteItem = document.createElement('div');
+                            noteItem.className = 'note-item';
+                            
+                            const noteMeta = document.createElement('div');
+                            noteMeta.className = 'note-meta';
+                            noteMeta.textContent = `Saved: ${new Date(note.created_at).toLocaleString()}`;
+                            
+                            const noteContent = document.createElement('div');
+                            noteContent.className = 'note-content';
+                            noteContent.textContent = note.content;
+                            
+                            noteItem.appendChild(noteMeta);
+                            noteItem.appendChild(noteContent);
+                            notesList.appendChild(noteItem);
+                        });
+                        
+                        log(`Loaded ${data.length} notes`);
+                    } else {
+                        notesList.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">No notes yet. Write your first note above!</div>';
+                    }
+                } catch (err) {
+                    log(`Load notes exception: ${err.message}`);
+                }
+            }
             supabase.auth.onAuthStateChange(async (event, session) => {
                 log(`Auth event: ${event}`);
                 
