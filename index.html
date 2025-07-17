@@ -144,27 +144,41 @@ async function saveNote(){
 }
 
 /* ---------- EVENTS ---------- */
-loginBtn.onclick=()=>sb.auth.signInWithOAuth({
-  provider:"google",options:{redirectTo:location.href}
-});
-logoutBtn.onclick=async()=>{
-  const {error}=await sb.auth.signOut();
-  if(error){show(error.message,false);}
-  // fallback clear in 2 s
-  setTimeout(()=>{if(sb.auth.getSession().data.session){sb.auth.setSession(null);}},2000);
-};
-saveBtn.onclick=saveNote;
-pingBtn.onclick=()=>safe("ping",signal=>
-  sb.from("notes").select("id",{head:true,signal}).limit(1)
-);
+loginBtn.onclick = () =>
+  sb.auth.signInWithOAuth({
+    provider: "google",
+    // send Google back to the bare page (no fragment) → avoids “##access_token”
+    options: { redirectTo: location.origin + location.pathname }
+  });
 
+logoutBtn.onclick = async () => {
+  const { error } = await sb.auth.signOut();
+  if (error) { show(error.message, false); }
+  // fallback: clear if the SIGNED_OUT event doesn’t arrive
+  setTimeout(() => {
+    if (sb.auth.getSession().data.session) sb.auth.setSession(null);
+  }, 2000);
+};
+
+saveBtn.onclick  = saveNote;
+pingBtn.onclick  = () => safe("ping", signal =>
+  sb.from("notes").select("id", { head: true, signal }).limit(1)
+);
+  
 /* ---------- AUTH LISTENER ---------- */
-sb.auth.onAuthStateChange(async(ev,sess)=>{
-  log("📢 "+ev);
-  currentUser=sess?.user||null;
+sb.auth.onAuthStateChange(async (ev, sess) => {
+  log("📢 " + ev);
+
+  // strip the fragment once Supabase parsed it
+  if (ev === "SIGNED_IN" && location.hash.startsWith("#access_token")) {
+    history.replaceState({}, "", location.pathname);
+  }
+
+  currentUser = sess?.user || null;
   updateUI();
-  if(currentUser&&ev!=="SIGNED_OUT") await loadNotes();
+  if (currentUser && ev !== "SIGNED_OUT") await loadNotes();
 });
+
 
 /* ---------- FIRST LOAD ---------- */
 const {data:{session}}=await sb.auth.getSession();
