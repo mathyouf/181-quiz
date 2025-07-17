@@ -1,20 +1,10 @@
-// Form submission handler
-        notesForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveNote();
-        });<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Notes App</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase/2.39.7/umd/supabase.min.js"></script>
-    <script>
-        // Fallback CDN if primary fails
-        if (!window.supabase) {
-            document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\/script>');
-        }
-    </script>
+    <title>Simple Notes App</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         * {
             margin: 0;
@@ -23,480 +13,322 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             padding: 20px;
         }
 
         .container {
+            max-width: 500px;
+            margin: 0 auto;
             background: white;
             border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
-            backdrop-filter: blur(10px);
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
 
         h1 {
             text-align: center;
             color: #333;
             margin-bottom: 30px;
-            font-size: 2.5em;
+            font-size: 2em;
+        }
+
+        .debug {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
             font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
         }
 
-        .auth-section {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .google-btn {
+        .btn-google {
             background: #4285f4;
             color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 50px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3);
         }
 
-        .google-btn:hover {
+        .btn-google:hover {
             background: #3367d6;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(66, 133, 244, 0.4);
         }
 
-        .logout-btn {
+        .btn-logout {
             background: #dc3545;
             color: white;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-left: 10px;
         }
 
-        .logout-btn:hover {
-            background: #c82333;
-            transform: translateY(-1px);
+        .btn-save {
+            background: #28a745;
+            color: white;
         }
 
         .user-info {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 30px;
+            background: #e9ecef;
             padding: 15px;
-            background: #f8f9fa;
-            border-radius: 15px;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            margin-right: 15px;
-        }
-
-        .notes-section {
-            display: none;
-        }
-
-        .notes-section.active {
-            display: block;
-        }
-
-        .form-group {
+            border-radius: 10px;
             margin-bottom: 20px;
+            text-align: center;
         }
 
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
+        .user-info img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin-bottom: 10px;
         }
 
         textarea {
             width: 100%;
             min-height: 200px;
             padding: 15px;
-            border: 2px solid #e9ecef;
-            border-radius: 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
             font-size: 16px;
             font-family: inherit;
             resize: vertical;
-            transition: border-color 0.3s ease;
+            margin-bottom: 15px;
         }
 
         textarea:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #4285f4;
         }
 
-        .save-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 40px;
-            border-radius: 50px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            width: 100%;
-            margin-top: 20px;
-        }
-
-        .save-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
-        }
-
-        .save-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .status-message {
-            margin-top: 15px;
+        .status {
             padding: 10px;
-            border-radius: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
             text-align: center;
             font-weight: 500;
-            display: none;
         }
 
-        .status-message.success {
+        .status.success {
             background: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
 
-        .status-message.error {
+        .status.error {
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
 
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .setup-message {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-            padding: 20px;
-            border-radius: 15px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .setup-message h3 {
-            margin-bottom: 10px;
-            color: #856404;
-        }
-
-        .setup-message code {
-            background: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
+        .hidden {
+            display: none;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📝 My Notes</h1>
+        <h1>📝 Notes App</h1>
         
-        <div class="setup-message">
-            <h3>Debug Mode Active</h3>
-            <p>✅ Supabase credentials configured!</p>
-            <p>✅ Configured for GitHub Pages: https://mathyouf.github.io/181-quiz/</p>
-            <p>🔍 Click "Sign in with Google" to see detailed error messages</p>
-            <p>📋 The app will now show what's happening when you try to sign in</p>
+        <div id="debug" class="debug">App starting...</div>
+        
+        <div id="status" class="status hidden"></div>
+        
+        <!-- Login Section -->
+        <div id="loginSection">
+            <button id="loginBtn" class="btn btn-google">
+                🔐 Sign in with Google
+            </button>
         </div>
-
-        <div class="auth-section">
-            <div id="loginSection">
-                <button class="google-btn" onclick="handleSignInClick()" id="googleSignInBtn">
-                    🔐 Sign in with Google
-                </button>
-                <div id="debugOutput" style="margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 8px; font-family: monospace; font-size: 12px; display: none;"></div>
+        
+        <!-- User Section -->
+        <div id="userSection" class="hidden">
+            <div class="user-info">
+                <img id="userAvatar" src="" alt="Avatar">
+                <div id="userEmail"></div>
+                <button id="logoutBtn" class="btn btn-logout">Sign Out</button>
             </div>
             
-            <div id="userSection" style="display: none;">
-                <div class="user-info">
-                    <img id="userAvatar" class="user-avatar" src="" alt="User Avatar">
-                    <span id="userEmail"></span>
-                    <button class="logout-btn" onclick="signOut()">Sign Out</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="notes-section" id="notesSection">
-            <form id="notesForm">
-                <div class="form-group">
-                    <label for="noteContent">Your Note:</label>
-                    <textarea 
-                        id="noteContent" 
-                        placeholder="Write your thoughts here... They'll be automatically saved when you click Save Note."
-                        maxlength="5000"
-                    ></textarea>
-                </div>
-                <button type="submit" class="save-btn" id="saveBtn">
-                    💾 Save Note
-                </button>
-            </form>
-            
-            <div id="statusMessage" class="status-message"></div>
+            <textarea id="noteText" placeholder="Write your note here..."></textarea>
+            <button id="saveBtn" class="btn btn-save">💾 Save Note</button>
         </div>
     </div>
 
     <script>
-        // Supabase configuration
-        const SUPABASE_URL = 'https://pmceyfxrrbyipwmedfqc.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU';
-        
-        // Global variables
-        let supabase;
-        let currentUser = null;
-        let loginSection, userSection, notesSection, userAvatar, userEmail, noteContent, notesForm, saveBtn, statusMessage;
-
-        // Check if user is already logged in
-        async function checkAuth() {
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    handleAuthSuccess(user);
-                }
-            } catch (error) {
-                console.error('Error checking auth:', error);
-            }
+        // Simple debug logger
+        function log(message) {
+            const debug = document.getElementById('debug');
+            const time = new Date().toLocaleTimeString();
+            debug.textContent += `\n${time}: ${message}`;
+            debug.scrollTop = debug.scrollHeight;
         }
 
-        // Sign in with Google
-        async function signInWithGoogle() {
-            try {
-                const { data, error } = await supabase.auth.signInWithOAuth({
-                    provider: 'google',
-                    options: {
-                        redirectTo: window.location.href
-                    }
-                });
-
-                if (error) {
-                    showMessage('Failed to sign in with Google: ' + error.message, 'error');
-                }
-            } catch (error) {
-                console.error('Error signing in:', error);
-                showMessage('Failed to sign in with Google', 'error');
-            }
+        function showStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.classList.remove('hidden');
+            setTimeout(() => status.classList.add('hidden'), 5000);
         }
 
-        // Sign out
-        async function signOut() {
-            try {
-                const { error } = await supabase.auth.signOut();
-                if (error) {
-                    showMessage('Error signing out: ' + error.message, 'error');
-                } else {
-                    handleAuthLogout();
-                }
-            } catch (error) {
-                console.error('Error signing out:', error);
-                showMessage('Error signing out', 'error');
-            }
-        }
-
-        // Handle successful authentication
-        function handleAuthSuccess(user) {
-            currentUser = user;
+        // Initialize everything when page loads
+        window.addEventListener('load', function() {
+            log('Page loaded, initializing...');
             
-            // Update UI
-            loginSection.style.display = 'none';
-            userSection.style.display = 'block';
-            notesSection.classList.add('active');
-            
-            // Display user info
-            userAvatar.src = user.user_metadata.avatar_url || '';
-            userEmail.textContent = user.email;
-            
-            // Load user's note
-            loadUserNote();
-        }
-
-        // Handle logout
-        function handleAuthLogout() {
-            currentUser = null;
-            
-            // Update UI
-            loginSection.style.display = 'block';
-            userSection.style.display = 'none';
-            notesSection.classList.remove('active');
-            
-            // Clear form
-            noteContent.value = '';
-            hideMessage();
-        }
-
-        // Load user's existing note
-        async function loadUserNote() {
-            try {
-                const { data, error } = await supabase
-                    .from('notes')
-                    .select('content')
-                    .eq('user_id', currentUser.id)
-                    .single();
-
-                if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-                    console.error('Error loading note:', error);
-                    showMessage('Error loading your note', 'error');
-                    return;
-                }
-
-                if (data) {
-                    noteContent.value = data.content || '';
-                }
-            } catch (error) {
-                console.error('Error loading note:', error);
-                showMessage('Error loading your note', 'error');
-            }
-        }
-
-        // Save note
-        async function saveNote() {
-            if (!currentUser) {
-                showMessage('Please sign in first', 'error');
-                return;
-            }
-
-            const content = noteContent.value.trim();
-            
-            try {
-                saveBtn.disabled = true;
-                saveBtn.innerHTML = '<span class="loading"></span>Saving...';
-
-                const { data, error } = await supabase
-                    .from('notes')
-                    .upsert({
-                        user_id: currentUser.id,
-                        content: content,
-                        updated_at: new Date().toISOString()
-                    }, {
-                        onConflict: 'user_id'
-                    });
-
-                if (error) {
-                    console.error('Error saving note:', error);
-                    showMessage('Failed to save note: ' + error.message, 'error');
-                } else {
-                    showMessage('Note saved successfully! 🎉', 'success');
-                }
-            } catch (error) {
-                console.error('Error saving note:', error);
-                showMessage('Failed to save note', 'error');
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = '💾 Save Note';
-            }
-        }
-
-        // Show status message
-        function showMessage(message, type) {
-            statusMessage.textContent = message;
-            statusMessage.className = `status-message ${type}`;
-            statusMessage.style.display = 'block';
-            
-            // Hide message after 5 seconds
-            setTimeout(() => {
-                hideMessage();
-            }, 5000);
-        }
-
-        // Hide status message
-        function hideMessage() {
-            statusMessage.style.display = 'none';
-        }
-
-        // Form submission handler
-        notesForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveNote();
-        });
-
-        // Initialize DOM elements and start the app
-        function initializeApp() {
-            // Check if Supabase is loaded
+            // Check if Supabase loaded
             if (!window.supabase) {
-                console.error('Supabase library not loaded');
-                setTimeout(initializeApp, 100); // Retry after 100ms
+                log('ERROR: Supabase not loaded');
+                showStatus('Supabase library failed to load', 'error');
                 return;
             }
-
-            // Initialize Supabase client
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+            
+            log('Supabase library loaded ✓');
+            
+            // Initialize Supabase
+            const supabaseUrl = 'https://pmceyfxrrbyipwmedfqc.supabase.co';
+            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU';
+            
+            const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+            log('Supabase client created ✓');
+            
             // Get DOM elements
-            loginSection = document.getElementById('loginSection');
-            userSection = document.getElementById('userSection');
-            notesSection = document.getElementById('notesSection');
-            userAvatar = document.getElementById('userAvatar');
-            userEmail = document.getElementById('userEmail');
-            noteContent = document.getElementById('noteContent');
-            notesForm = document.getElementById('notesForm');
-            saveBtn = document.getElementById('saveBtn');
-            statusMessage = document.getElementById('statusMessage');
-
-            // Form submission handler
-            notesForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                saveNote();
-            });
-
-            // Listen for auth changes
-            supabase.auth.onAuthStateChange((event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    handleAuthSuccess(session.user);
-                } else if (event === 'SIGNED_OUT') {
-                    handleAuthLogout();
+            const loginSection = document.getElementById('loginSection');
+            const userSection = document.getElementById('userSection');
+            const loginBtn = document.getElementById('loginBtn');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const saveBtn = document.getElementById('saveBtn');
+            const userAvatar = document.getElementById('userAvatar');
+            const userEmail = document.getElementById('userEmail');
+            const noteText = document.getElementById('noteText');
+            
+            let currentUser = null;
+            
+            // Login button click
+            loginBtn.addEventListener('click', async function() {
+                log('Login button clicked');
+                
+                try {
+                    log('Starting Google OAuth...');
+                    showStatus('Connecting to Google...', 'success');
+                    
+                    const { data, error } = await supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: {
+                            redirectTo: window.location.origin + window.location.pathname
+                        }
+                    });
+                    
+                    if (error) {
+                        log(`OAuth error: ${error.message}`);
+                        showStatus(`Login failed: ${error.message}`, 'error');
+                    } else {
+                        log('OAuth initiated, should redirect...');
+                    }
+                } catch (err) {
+                    log(`Exception: ${err.message}`);
+                    showStatus(`Error: ${err.message}`, 'error');
                 }
             });
-
-            // Check authentication on page load
-            checkAuth();
-        }
-
-        // Wait for DOM to be ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeApp);
-        } else {
-            initializeApp();
-        }
+            
+            // Logout button
+            logoutBtn.addEventListener('click', async function() {
+                log('Logout clicked');
+                await supabase.auth.signOut();
+            });
+            
+            // Save note button
+            saveBtn.addEventListener('click', async function() {
+                if (!currentUser) return;
+                
+                log('Saving note...');
+                showStatus('Saving...', 'success');
+                
+                try {
+                    const { error } = await supabase
+                        .from('notes')
+                        .upsert({
+                            user_id: currentUser.id,
+                            content: noteText.value,
+                            updated_at: new Date().toISOString()
+                        });
+                    
+                    if (error) {
+                        log(`Save error: ${error.message}`);
+                        showStatus(`Save failed: ${error.message}`, 'error');
+                    } else {
+                        log('Note saved successfully');
+                        showStatus('Note saved!', 'success');
+                    }
+                } catch (err) {
+                    log(`Save exception: ${err.message}`);
+                    showStatus(`Save error: ${err.message}`, 'error');
+                }
+            });
+            
+            // Handle auth state changes
+            supabase.auth.onAuthStateChange(async (event, session) => {
+                log(`Auth event: ${event}`);
+                
+                if (event === 'SIGNED_IN' && session) {
+                    currentUser = session.user;
+                    log(`User signed in: ${currentUser.email}`);
+                    
+                    // Show user section
+                    loginSection.classList.add('hidden');
+                    userSection.classList.remove('hidden');
+                    
+                    // Update user info
+                    userEmail.textContent = currentUser.email;
+                    userAvatar.src = currentUser.user_metadata.avatar_url || '';
+                    
+                    // Load existing note
+                    try {
+                        const { data, error } = await supabase
+                            .from('notes')
+                            .select('content')
+                            .eq('user_id', currentUser.id)
+                            .single();
+                        
+                        if (data) {
+                            noteText.value = data.content || '';
+                            log('Existing note loaded');
+                        }
+                    } catch (err) {
+                        log(`Note load error: ${err.message}`);
+                    }
+                    
+                } else if (event === 'SIGNED_OUT') {
+                    currentUser = null;
+                    log('User signed out');
+                    
+                    // Show login section
+                    loginSection.classList.remove('hidden');
+                    userSection.classList.add('hidden');
+                    noteText.value = '';
+                }
+            });
+            
+            // Check for existing session
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                if (session) {
+                    log('Existing session found');
+                } else {
+                    log('No existing session');
+                }
+            });
+            
+            log('App initialized successfully ✓');
+        });
     </script>
 </body>
 </html>
