@@ -80,6 +80,13 @@ const sb=createClient(URL,KEY,{
 });
 log("✅ Client ready");
 
+  /* ---- one‑time cleanup (empty or token hash) ---- */
+if (location.hash) {
+  history.replaceState({}, "", location.pathname + location.search);
+  log("🔧 stripped initial hash");
+}
+
+
 /* ---------- ELEMENTS ---------- */
 const loginSec=document.getElementById("loginSection");
 const userSec =document.getElementById("userSection");
@@ -169,9 +176,9 @@ pingBtn.onclick  = () => safe("ping", signal =>
 sb.auth.onAuthStateChange(async (ev, sess) => {
   log("📢 " + ev);
 
-  // strip the fragment once Supabase parsed it
-  if (ev === "SIGNED_IN" && location.hash.startsWith("#access_token")) {
-    history.replaceState({}, "", location.pathname);
+  // remove *any* hash (#access_token… or bare #) once Supabase parsed it
+  if (location.hash) {
+    history.replaceState({}, "", location.pathname + location.search);
   }
 
   currentUser = sess?.user || null;
