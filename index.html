@@ -57,7 +57,6 @@
     <button id="pingBtn" style="background:#17a2b8;color:#fff">🔍 Ping REST</button>
 
     <div id="notesList"></div>
-    <select id="userFilter" style="width:100%;margin-bottom:12px"></select>
   </div>
 </div>
 <script type="module">
@@ -241,157 +240,15 @@ sb.auth.onAuthStateChange(async (ev, sess) => {
   currentUser = sess?.user || null;
   updateUI();
   if(currentUser && ev !== "SIGNED_OUT") await loadNotes();
-<script type="module">
-/* --------------------------------------------------
-   SUPABASE CONFIG
--------------------------------------------------- */
-const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
-const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
-
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-const sb = createClient(URL, KEY, {
-  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
 });
 
-/* --------------------------------------------------
-   DOM HELPERS
--------------------------------------------------- */
-const dbg    = document.getElementById("debug");
-const banner = document.getElementById("status");
-function log(m){ dbg.textContent+=`\n${new Date().toLocaleTimeString()}: ${m}`; dbg.scrollTop=dbg.scrollHeight; }
-function show(m, ok){ banner.textContent=m; banner.className=ok?"ok":"err";
-  banner.classList.remove("hidden"); setTimeout(()=>banner.classList.add("hidden"),3e3); }
-
-/* --------------------------------------------------
-   ELEMENT REFERENCES
--------------------------------------------------- */
-const loginSec = document.getElementById("loginSection");
-const userSec  = document.getElementById("userSection");
-const loginBtn = document.getElementById("loginBtn");
-const logoutBtn= document.getElementById("logoutBtn");
-const saveBtn  = document.getElementById("saveBtn");
-const pingBtn  = document.getElementById("pingBtn");
-const noteTxt  = document.getElementById("noteText");
-const list     = document.getElementById("notesList");
-const userInfo = document.getElementById("userInfo");
-const userSel  = document.getElementById("userFilter");   // <-- NEW dropdown
-
-/* --------------------------------------------------
-   STATE
--------------------------------------------------- */
-let currentUser = null;
-let allNotes    = [];        // holds every note fetched once
-function updateUI(){
-  if(currentUser){
-    loginSec.classList.add("hidden"); userSec.classList.remove("hidden");
-    userInfo.textContent = `Logged in as ${currentUser.email}`;
-  }else{
-    userSec.classList.add("hidden");  loginSec.classList.remove("hidden");
-    userInfo.textContent=""; noteTxt.value=""; list.innerHTML="";
-  }
-}
-
-/* ---------------- safe wrapper (timeouts + refresh) -------- */
-async function safe(label, fn){
-  const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),8000);
-  try{
-    let {data,error}=await fn(ctrl.signal);
-    if(error?.status===401){ await sb.auth.refreshSession(); ({data,error}=await fn(ctrl.signal)); }
-    if(error) throw error;
-    return data;
-  }catch(e){ log(`❌ ${label}: ${e.message}`); show(e.message,false); }
-  finally{ clearTimeout(t); }
-}
-
-/* --------------------------------------------------
-   NOTE FUNCTIONS
--------------------------------------------------- */
-async function fetchAllNotes(){
-  log("🔄 fetchAllNotes (public read)");
-  allNotes = await safe("fetch", signal =>
-    sb.from("notes").select("*", { signal }).order("created_at",{ascending:false})
-  ) || [];
-  buildUserDropdown();
-  renderNotes();
-}
-
-/* Build dropdown options based on distinct authors in allNotes */
-function buildUserDropdown(){
-  userSel.innerHTML="";
-  const opts = new Map();                     // email/uid -> label
-  opts.set("all","— All Users —");
-  allNotes.forEach(n => {
-    // fallback to UID if email unavailable
-    opts.set(n.user_email || n.user_id, n.user_email || n.user_id);
-  });
-  opts.forEach((label,val)=>{
-    const op=document.createElement("option"); op.value=val; op.textContent=label;
-    userSel.appendChild(op);
-  });
-  userSel.value="all";
-}
-
-/* Render notes filtered by dropdown */
-function renderNotes(){
-  const filter = userSel.value;
-  list.innerHTML="";
-  (filter==="all"?allNotes:allNotes.filter(n=>(n.user_email||n.user_id)===filter))
-    .forEach(n=>{
-      const wrap=document.createElement("div"); wrap.className="note";
-      wrap.innerHTML=`
-        <div class="meta">
-          ${new Date(n.created_at).toLocaleString()} — ${n.user_email||n.user_id}
-        </div>${n.content}`;
-      list.appendChild(wrap);
-    });
-}
-
-/* --------------------------------------------------
-   SAVE (still private insert)
--------------------------------------------------- */
-async function saveNote(){
-  const text=noteTxt.value.trim(); if(!text){ show("Write something!",false); return; }
-  await safe("insert", signal =>
-    sb.from("notes").insert(
-      { user_id: currentUser.id, user_email: currentUser.email, content: text },
-      { signal }
-    )
-  );
-  noteTxt.value=""; show("Saved",true);
-  await fetchAllNotes();                      // refresh list for everyone
-}
-
-/* --------------------------------------------------
-   EVENTS
--------------------------------------------------- */
-loginBtn.onclick = () =>
-  sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo:location.href }});
-
-logoutBtn.onclick = async ()=>{
-  const {error}=await sb.auth.signOut();
-  if(error){ show(error.message,false); return; }
-  window.location.replace(location.origin+location.pathname);
-};
-
-saveBtn.onclick = saveNote;
-pingBtn.onclick = () => safe("ping", s => sb.from("notes").select("id",{head:true,signal:s}));
-userSel.onchange = renderNotes;   // <-- NEW: re-filter on dropdown change
-
-/* --------------------------------------------------
-   AUTH LISTENER
--------------------------------------------------- */
-sb.auth.onAuthStateChange(async(ev,sess)=>{
-  log("📢 "+ev);
-  currentUser=sess?.user||null; updateUI();
-  if(ev==="SIGNED_IN" || ev==="INITIAL_SESSION"){
-    await fetchAllNotes();                    // load notes for dropdown
-  }
-});
-
-/* first load */
-const {data:{session}}=await sb.auth.getSession();
-currentUser=session?.user||null; updateUI();
-if(currentUser) await fetchAllNotes();
+/* ------------------------------------------------------------------
+   FIRST LOAD
+------------------------------------------------------------------- */
+const { data:{ session } } = await sb.auth.getSession();
+currentUser = session?.user || null;
+updateUI();
+if(currentUser) await loadNotes();
 log("✅ initial session ready");
 </script>
 </body>
