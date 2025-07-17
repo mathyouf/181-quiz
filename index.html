@@ -59,7 +59,6 @@
     <div id="notesList"></div>
   </div>
 </div>
-
 <script type="module">
 /* ---------- CONFIG ---------- */
 const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
@@ -68,17 +67,24 @@ const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZi
 /* ---------- HELPERS ---------- */
 const dbg    = document.getElementById("debug");
 const banner = document.getElementById("status");
-function log(m){dbg.textContent+=`\n${new Date().toLocaleTimeString()}: ${m}`;dbg.scrollTop=dbg.scrollHeight;}
-function show(msg, ok){banner.textContent=msg;banner.className=ok?"ok":"err";
-  banner.classList.remove("hidden");setTimeout(()=>banner.classList.add("hidden"),3000);}
-window.addEventListener("unhandledrejection", e=>log("⚠️  "+e.reason));
+function log(m){
+  dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${m}`;
+  dbg.scrollTop    = dbg.scrollHeight;
+}
+function show(msg, ok){
+  banner.textContent = msg;
+  banner.className   = ok ? "ok" : "err";
+  banner.classList.remove("hidden");
+  setTimeout(()=>banner.classList.add("hidden"), 3000);
+}
+window.addEventListener("unhandledrejection", e => log("⚠️  " + e.reason));
 
 /* ---------- CLIENT ---------- */
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const sb = createClient(URL, KEY, {
-  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
-log("✅ Client ready");
+log("✅ Supabase client ready");
 
 /* ---------- ELEMENTS ---------- */
 const loginSec = document.getElementById("loginSection");
@@ -91,90 +97,108 @@ const noteTxt  = document.getElementById("noteText");
 const list     = document.getElementById("notesList");
 const userInfo = document.getElementById("userInfo");
 
-let currentUser=null;
+let currentUser = null;
 function updateUI(){
-  if(currentUser){
-    loginSec.classList.add("hidden"); userSec.classList.remove("hidden");
+  if (currentUser){
+    loginSec.classList.add("hidden");
+    userSec.classList.remove("hidden");
     userInfo.textContent = `Logged in as ${currentUser.email}`;
-  }else{
-    userSec.classList.add("hidden");  loginSec.classList.remove("hidden");
-    userInfo.textContent=""; noteTxt.value=""; list.innerHTML="";
+  } else {
+    userSec.classList.add("hidden");
+    loginSec.classList.remove("hidden");
+    userInfo.textContent = "";
+    noteTxt.value        = "";
+    list.innerHTML       = "";
   }
 }
 
 /* ---------- SAFE WRAPPER ---------- */
 async function safe(label, fn){
-  const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(),8000);
+  const ctrl = new AbortController();
+  const t    = setTimeout(() => ctrl.abort(), 8000);   // 8‑s timeout
   try{
-    let {data,error} = await fn(ctrl.signal);
-    if(error?.status===401){
+    let { data, error } = await fn(ctrl.signal);
+    if (error?.status === 401){                       // token expired race
       log("🔄 token expired; refreshing");
       await sb.auth.refreshSession();
-      ({data,error} = await fn(ctrl.signal));
+      ({ data, error } = await fn(ctrl.signal));
     }
-    if(error) throw error;
+    if (error) throw error;
     return data;
-  }catch(e){ log(`❌ ${label}: ${e.message}`); show(e.message,false); }
-  finally{ clearTimeout(t); }
+  }catch(e){
+    log(`❌ ${label}: ${e.message}`);
+    show(e.message, false);
+  }finally{
+    clearTimeout(t);
+  }
 }
 
 /* ---------- LOAD & SAVE ---------- */
 async function loadNotes(){
   log("🔄 loadNotes()");
   const rows = await safe("loadNotes", signal =>
-    sb.from("notes").select("*",{signal})
+    sb.from("notes")
+      .select("*", { signal })
       .eq("user_id", currentUser.id)
-      .order("created_at",{ascending:false})
+      .order("created_at", { ascending: false })
   );
-  if(!rows) return;
-  list.innerHTML="";
-  rows.forEach(r=>{
-    const div=document.createElement("div");
-    div.className="note";
-    div.innerHTML=
-      `<div class="meta">${new Date(r.created_at).toLocaleString()}</div>${r.content}`;
+  if (!rows) return;
+
+  list.innerHTML = "";
+  rows.forEach(r => {
+    const div = document.createElement("div");
+    div.className = "note";
+    div.innerHTML = `
+      <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
+      ${r.content}`;
     list.appendChild(div);
   });
   log(`✅ loaded ${rows.length}`);
 }
+
 async function saveNote(){
   const txt = noteTxt.value.trim();
-  if(!txt){ show("Write something!",false); return; }
+  if (!txt){ show("Write something!", false); return; }
+
   await safe("insert", signal =>
     sb.from("notes")
-      .insert({user_id:currentUser.id, content:txt},{signal})
+      .insert({ user_id: currentUser.id, content: txt }, { signal })
       .select()
   );
-  noteTxt.value=""; show("Saved",true); await loadNotes();
+  noteTxt.value = "";
+  show("Saved", true);
+  await loadNotes();
 }
 
 /* ---------- EVENTS ---------- */
-loginBtn.onclick = () => sb.auth.signInWithOAuth({
-  provider: "google",
-  options: { redirectTo: location.href }     // original behavior
-});
+loginBtn.onclick = () =>
+  sb.auth.signInWithOAuth({
+    provider: "google",
+    options : { redirectTo: location.href }   // original behaviour
+  });
 
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
 
-  const { error } = await sb.auth.signOut();
-  if (error){ show(error.message,false); return; }
+  /* Strip any hash (# or #access_token…) right away */
+  if (location.hash){
+    history.replaceState({}, "", location.href.split("#")[0]);
+    log("🔧 hash removed immediately");
+  }
 
-/* Clean up “#/”, “#access_token…”, or a bare “#” */
-if (location.hash !== "" || location.href.endsWith("#")) {
-  history.replaceState({}, "", location.pathname + location.search);
-  log("🔧 hash removed after logout");
-}
+  const { error } = await sb.auth.signOut();
+  if (error){ show(error.message, false); return; }
 
   /* fallback: clear session manually if event is missed */
-  setTimeout(()=>{
-    if(sb.auth.getSession().data.session) sb.auth.setSession(null);
-  },2000);
+  setTimeout(async () => {
+    const { data } = await sb.auth.getSession();
+    if (data.session) sb.auth.setSession(null);
+  }, 2000);
 };
 
 saveBtn.onclick = saveNote;
 pingBtn.onclick = () => safe("ping", signal =>
-  sb.from("notes").select("id",{head:true,signal}).limit(1)
+  sb.from("notes").select("id", { head: true, signal }).limit(1)
 );
 
 /* ---------- AUTH LISTENER ---------- */
@@ -182,16 +206,17 @@ sb.auth.onAuthStateChange(async (ev, sess) => {
   log("📢 " + ev);
   currentUser = sess?.user || null;
   updateUI();
-  if(currentUser && ev!=="SIGNED_OUT") await loadNotes();
+  if (currentUser && ev !== "SIGNED_OUT") await loadNotes();
 });
 
 /* ---------- FIRST LOAD ---------- */
-const {data:{session}} = await sb.auth.getSession();
+const { data: { session } } = await sb.auth.getSession();
 currentUser = session?.user || null;
 updateUI();
-if(currentUser) await loadNotes();
+if (currentUser) await loadNotes();
 log("✅ initial session ready");
 </script>
+
 
 </body>
 </html>
