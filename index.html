@@ -192,6 +192,7 @@
             
             <textarea id="noteText" placeholder="Write your note here..."></textarea>
             <button id="saveBtn" class="btn btn-save">💾 Save Note</button>
+            <button id="testBtn" class="btn" style="background: #ffc107; color: #000;">🔧 Test Database</button>
             
             <div id="notesHistory">
                 <h3>📚 Your Notes History</h3>
@@ -298,61 +299,107 @@
             
             // Save note button
             saveBtn.addEventListener('click', async function() {
-                if (!currentUser) return;
+                log('=== SAVE BUTTON CLICKED ===');
+                
+                if (!currentUser) {
+                    log('ERROR: No current user');
+                    showStatus('Not logged in!', 'error');
+                    return;
+                }
+                
+                log(`Current user: ${currentUser.email}`);
+                log(`User ID: ${currentUser.id}`);
                 
                 const noteContent = noteText.value.trim();
+                log(`Note content: "${noteContent}"`);
+                log(`Content length: ${noteContent.length}`);
+                
                 if (!noteContent) {
+                    log('ERROR: Empty note content');
                     showStatus('Please write something first!', 'error');
                     return;
                 }
                 
-                log('Saving note...');
+                log('Starting save process...');
                 showStatus('Saving...', 'success');
                 
                 try {
-                    const { data, error } = await supabase
-                        .from('notes')
-                        .insert({
-                            user_id: currentUser.id,
-                            content: noteContent
-                        });
+                    log('Calling supabase.from(notes).insert...');
                     
-                    if (error) {
-                        log(`Save error: ${error.message}`);
-                        log(`Error details: ${JSON.stringify(error)}`);
-                        showStatus(`Save failed: ${error.message}`, 'error');
+                    const insertData = {
+                        user_id: currentUser.id,
+                        content: noteContent
+                    };
+                    log(`Insert data: ${JSON.stringify(insertData)}`);
+                    
+                    const response = await supabase
+                        .from('notes')
+                        .insert(insertData);
+                    
+                    log(`Response received: ${JSON.stringify(response)}`);
+                    log(`Error: ${response.error ? JSON.stringify(response.error) : 'null'}`);
+                    log(`Data: ${response.data ? JSON.stringify(response.data) : 'null'}`);
+                    
+                    if (response.error) {
+                        log(`SAVE FAILED: ${response.error.message}`);
+                        log(`Error code: ${response.error.code}`);
+                        log(`Error details: ${response.error.details}`);
+                        log(`Error hint: ${response.error.hint}`);
+                        showStatus(`Save failed: ${response.error.message}`, 'error');
                     } else {
-                        log('Note saved successfully');
+                        log('SAVE SUCCESS - clearing form and reloading');
                         showStatus('Note saved!', 'success');
                         noteText.value = ''; // Clear the input
-                        loadNotes(); // Reload the notes list
+                        log('Form cleared, now loading notes...');
+                        await loadNotes(); // Reload the notes list
+                        log('Notes reload completed');
                     }
                 } catch (err) {
-                    log(`Save exception: ${err.message}`);
+                    log(`EXCEPTION during save: ${err.message}`);
+                    log(`Exception stack: ${err.stack}`);
                     showStatus(`Save error: ${err.message}`, 'error');
                 }
+                
+                log('=== SAVE PROCESS COMPLETE ===');
             });
             
             // Function to load and display notes
             async function loadNotes() {
-                if (!currentUser) return;
+                log('=== LOADING NOTES ===');
+                
+                if (!currentUser) {
+                    log('ERROR: No current user for loading notes');
+                    return;
+                }
+                
+                log(`Loading notes for user: ${currentUser.id}`);
                 
                 try {
-                    const { data, error } = await supabase
+                    const response = await supabase
                         .from('notes')
                         .select('*')
                         .eq('user_id', currentUser.id)
                         .order('created_at', { ascending: false });
                     
-                    if (error) {
-                        log(`Load notes error: ${error.message}`);
+                    log(`Load response: ${JSON.stringify(response)}`);
+                    
+                    if (response.error) {
+                        log(`Load notes error: ${response.error.message}`);
+                        log(`Error details: ${JSON.stringify(response.error)}`);
+                        showStatus(`Failed to load notes: ${response.error.message}`, 'error');
                         return;
                     }
+                    
+                    const data = response.data;
+                    log(`Found ${data ? data.length : 0} notes`);
                     
                     notesList.innerHTML = '';
                     
                     if (data && data.length > 0) {
-                        data.forEach(note => {
+                        log('Displaying notes...');
+                        data.forEach((note, index) => {
+                            log(`Note ${index}: ${note.content.substring(0, 50)}...`);
+                            
                             const noteItem = document.createElement('div');
                             noteItem.className = 'note-item';
                             
@@ -369,13 +416,18 @@
                             notesList.appendChild(noteItem);
                         });
                         
-                        log(`Loaded ${data.length} notes`);
+                        log(`Successfully displayed ${data.length} notes`);
                     } else {
+                        log('No notes found - showing empty message');
                         notesList.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">No notes yet. Write your first note above!</div>';
                     }
                 } catch (err) {
                     log(`Load notes exception: ${err.message}`);
+                    log(`Exception stack: ${err.stack}`);
+                    showStatus(`Error loading notes: ${err.message}`, 'error');
                 }
+                
+                log('=== LOAD NOTES COMPLETE ===');
             }
             supabase.auth.onAuthStateChange(async (event, session) => {
                 log(`Auth event: ${event}`);
