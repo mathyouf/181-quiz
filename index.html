@@ -1,28 +1,33 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>📝 Supabase Notes</title>
+  <title>📝 Supabase Notes (robust)</title>
+
+  <!-- Supabase JS -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
   <style>
+    /* basic styling (unchanged) */
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
          background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
          min-height:100vh;padding:20px}
     .container{max-width:500px;margin:auto;background:#fff;border-radius:20px;
-               padding:30px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
-    h1{text-align:center;margin-bottom:25px}
+               padding:25px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+    h1{text-align:center;margin-bottom:20px}
     .debug{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
            padding:10px;font:14px/1.4 monospace;white-space:pre-wrap;
-           height:180px;overflow-y:auto;margin-bottom:20px}
+           height:180px;overflow-y:auto;margin-bottom:18px}
     button,textarea{width:100%;font-size:16px;padding:14px;border-radius:10px;
                     border:none;margin-bottom:12px}
     button{font-weight:600;cursor:pointer;transition:.25s}
     .btn-google{background:#4285f4;color:#fff}.btn-google:hover{background:#3367d6}
     .btn-logout{background:#dc3545;color:#fff}
     .btn-save{background:#28a745;color:#fff}
-    textarea{border:2px solid #dee2e6;min-height:180px;resize:vertical}
+    textarea{border:2px solid #dee2e6;min-height:170px;resize:vertical}
     textarea:focus{outline:none;border-color:#4285f4}
     #notesList .note{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
                      padding:12px;margin-bottom:8px}
@@ -33,17 +38,16 @@
 <body>
   <div class="container">
     <h1>📝 Notes App</h1>
-
     <div id="debug" class="debug">App starting…</div>
 
-    <!-- LOGIN -->
+    <!-- Login -->
     <div id="loginSection">
       <button id="loginBtn" class="btn-google">🔐 Sign in with Google</button>
     </div>
 
-    <!-- APP -->
+    <!-- Main -->
     <div id="userSection" class="hidden">
-      <div id="userInfo" style="text-align:center;margin-bottom:20px"></div>
+      <div id="userInfo" style="text-align:center;margin-bottom:18px"></div>
       <button id="logoutBtn" class="btn-logout">🚪 Logout</button>
 
       <textarea id="noteText" placeholder="Write your note…"></textarea>
@@ -54,67 +58,80 @@
   </div>
 
 <script>
-/* ---------- helpers ---------- */
-const dbg  = document.getElementById('debug');
-function log(msg){
-  dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
-  dbg.scrollTop   = dbg.scrollHeight;
+/* ---------- util ---------- */
+const dbg=document.getElementById('debug');
+function log(m){dbg.textContent+=`\n${new Date().toLocaleTimeString()}: ${m}`;dbg.scrollTop=dbg.scrollHeight;}
+log('Script tag loaded');
+
+/* ---------- verify Supabase SDK ---------- */
+if(!window.supabase || typeof window.supabase.createClient!=='function'){
+  log('❌ Supabase JS NOT present — check network or CDN URL');
+  // without the SDK, nothing else will work, so stop here
+  throw new Error('Supabase SDK missing');
 }
 
-/* ---------- Supabase ---------- */
-const URL = 'https://pmceyfxrrbyipwmedfqc.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU';
-window.sb = supabase.createClient(URL, KEY);                // make global
+log('✅ Supabase SDK detected');
+
+/* ---------- create client safely ---------- */
+let sb;
+try{
+  const URL='https://pmceyfxrrbyipwmedfqc.supabase.co';
+  const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU';
+  sb = supabase.createClient(URL, KEY);
+  window.sb = sb;
+  log('✅ Supabase client created');
+}catch(e){
+  log('❌ Failed to create client: '+e.message);
+  throw e;        // stop script — nothing works without client
+}
 
 /* ---------- elements ---------- */
-const loginSec   = document.getElementById('loginSection');
-const userSec    = document.getElementById('userSection');
-const userInfo   = document.getElementById('userInfo');
-const loginBtn   = document.getElementById('loginBtn');
-const logoutBtn  = document.getElementById('logoutBtn');
-const saveBtn    = document.getElementById('saveBtn');
-const noteText   = document.getElementById('noteText');
-const notesList  = document.getElementById('notesList');
+const loginSec  = document.getElementById('loginSection');
+const userSec   = document.getElementById('userSection');
+const userInfo  = document.getElementById('userInfo');
+const loginBtn  = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const saveBtn   = document.getElementById('saveBtn');
+const noteText  = document.getElementById('noteText');
+const notesList = document.getElementById('notesList');
 
-let currentUser = null;
+let currentUser=null;
 
-/* ---------- UI helpers ---------- */
+/* ---------- UI ---------- */
 function updateUI(){
   if(currentUser){
     loginSec.classList.add('hidden');
     userSec.classList.remove('hidden');
-    userInfo.textContent = `Logged in as ${currentUser.email}`;
+    userInfo.textContent=`Logged in as ${currentUser.email}`;
   }else{
     userSec.classList.add('hidden');
     loginSec.classList.remove('hidden');
-    userInfo.textContent = '';
-    noteText.value = '';
-    notesList.innerHTML = '';
+    userInfo.textContent='';
+    noteText.value='';
+    notesList.innerHTML='';
   }
 }
 
-/* ---------- note helpers ---------- */
+/* ---------- notes ---------- */
 async function loadNotes(){
-  const {data,error} = await sb
-      .from('notes')
+  const {data,error}=await sb.from('notes')
       .select('*')
-      .eq('user_id', currentUser.id)
+      .eq('user_id',currentUser.id)
       .order('created_at',{ascending:false});
-  if(error){ log('Load notes error: '+error.message); return; }
-
+  if(error){log('Load notes error: '+error.message);return;}
   notesList.innerHTML='';
   data.forEach(n=>{
-    const wrap=document.createElement('div'); wrap.className='note';
-    wrap.innerHTML = `<div class="meta">${new Date(n.created_at).toLocaleString()}</div>
-                      <div>${n.content}</div>`;
-    notesList.appendChild(wrap);
+    const el=document.createElement('div');
+    el.className='note';
+    el.innerHTML=`<div class="meta">${new Date(n.created_at).toLocaleString()}</div><div>${n.content}</div>`;
+    notesList.appendChild(el);
   });
   log(`Loaded ${data.length} notes`);
 }
 
-/* ---------- event wiring ---------- */
-loginBtn.onclick = async()=>{
-  log('Login button clicked');
+/* ---------- events ---------- */
+loginBtn.onclick=async()=>{
+  log('Login button pressed');
   const {error}=await sb.auth.signInWithOAuth({
     provider:'google',
     options:{redirectTo:location.href}
@@ -122,43 +139,39 @@ loginBtn.onclick = async()=>{
   if(error) log('OAuth error: '+error.message);
 };
 
-logoutBtn.onclick = async()=>{
-  log('Logout button clicked');
+logoutBtn.onclick=async()=>{
+  log('Logout requested');
   const {error}=await sb.auth.signOut();
-  if(error){ log('Logout error: '+error.message); return; }
-  log('Logout successful');
+  if(error) log('Logout error: '+error.message);
 };
 
-saveBtn.onclick = async()=>{
-  const content = noteText.value.trim();
-  if(!content){ log('Empty note – ignored'); return; }
-
-  const {data,error} = await sb
-        .from('notes')
+saveBtn.onclick=async()=>{
+  const content=noteText.value.trim();
+  if(!content){log('Empty note ignored');return;}
+  const {data,error}=await sb.from('notes')
         .insert({user_id:currentUser.id,content})
-        .select();                       // returns inserted row
-  if(error){ log('Insert error: '+error.message); return; }
-
+        .select();
+  if(error){log('Insert error: '+error.message);return;}
   log('Note saved');
   noteText.value='';
   await loadNotes();
 };
 
-/* ---------- auth state ---------- */
-sb.auth.onAuthStateChange(async(event,session)=>{
-  log('Auth event: '+event);
-  currentUser = session?.user || null;
+/* ---------- auth listener ---------- */
+sb.auth.onAuthStateChange(async(evt,sess)=>{
+  log('Auth event: '+evt);
+  currentUser=sess?.user||null;
   updateUI();
   if(currentUser) await loadNotes();
 });
 
-/* ---------- restore session on first load ---------- */
+/* ---------- initial session ---------- */
 (async()=>{
-  const {data:{session}} = await sb.auth.getSession();
-  currentUser = session?.user || null;
+  const {data:{session}}=await sb.auth.getSession();
+  currentUser=session?.user||null;
   updateUI();
   if(currentUser) await loadNotes();
-  log('Initial session check complete');
+  log('Initial session check done');
 })();
 </script>
 </body>
