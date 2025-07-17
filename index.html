@@ -1,204 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Simple Notes App</title>
+  <title>📝 Supabase Notes</title>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      padding: 20px;
-    }
-    .container { max-width: 500px; margin: auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-    h1 { text-align: center; color: #333; margin-bottom: 30px; font-size: 2em; }
-    .debug { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-family: monospace; font-size: 14px; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
-    .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 15px; transition: all 0.3s ease; }
-    .btn-google { background: #4285f4; color: white; }
-    .btn-google:hover { background: #3367d6; }
-    .btn-logout { background: #dc3545; color: white; }
-    .btn-save { background: #28a745; color: white; }
-    .user-info { background: #e9ecef; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
-    .user-info img { width: 50px; height: 50px; border-radius: 50%; margin-bottom: 10px; }
-    textarea { width: 100%; min-height: 200px; padding: 15px; border: 2px solid #dee2e6; border-radius: 10px; font-size: 16px; font-family: inherit; resize: vertical; margin-bottom: 15px; }
-    .status { padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: 500; }
-    .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-    .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    .hidden { display: none; }
-    #notesHistory { margin-top: 30px; padding-top: 20px; border-top: 2px solid #dee2e6; }
-    .note-item { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 10px; }
-    .note-meta { font-size: 12px; color: #6c757d; margin-bottom: 8px; }
-    .note-content { white-space: pre-wrap; word-wrap: break-word; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+         background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+         min-height:100vh;padding:20px}
+    .container{max-width:500px;margin:auto;background:#fff;border-radius:20px;
+               padding:30px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+    h1{text-align:center;margin-bottom:25px}
+    .debug{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
+           padding:10px;font:14px/1.4 monospace;white-space:pre-wrap;
+           height:180px;overflow-y:auto;margin-bottom:20px}
+    button,textarea{width:100%;font-size:16px;padding:14px;border-radius:10px;
+                    border:none;margin-bottom:12px}
+    button{font-weight:600;cursor:pointer;transition:.25s}
+    .btn-google{background:#4285f4;color:#fff}.btn-google:hover{background:#3367d6}
+    .btn-logout{background:#dc3545;color:#fff}
+    .btn-save{background:#28a745;color:#fff}
+    textarea{border:2px solid #dee2e6;min-height:180px;resize:vertical}
+    textarea:focus{outline:none;border-color:#4285f4}
+    #notesList .note{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
+                     padding:12px;margin-bottom:8px}
+    #notesList .meta{font-size:12px;color:#6c757d;margin-bottom:6px}
+    .hidden{display:none}
   </style>
 </head>
 <body>
   <div class="container">
     <h1>📝 Notes App</h1>
-    <div id="debug" class="debug">App starting...</div>
-    <div id="status" class="status hidden"></div>
 
+    <div id="debug" class="debug">App starting…</div>
+
+    <!-- LOGIN -->
     <div id="loginSection">
-      <button id="loginBtn" class="btn btn-google">🔐 Sign in with Google</button>
+      <button id="loginBtn" class="btn-google">🔐 Sign in with Google</button>
     </div>
 
+    <!-- APP -->
     <div id="userSection" class="hidden">
-      <div class="user-info">
-        <img id="userAvatar" src="" alt="Avatar"/>
-        <div id="userEmail"></div>
-        <button id="logoutBtn" class="btn btn-logout">Sign Out</button>
-      </div>
-      <textarea id="noteText" placeholder="Write your note here..."></textarea>
-      <button id="saveBtn" class="btn btn-save">💾 Save Note</button>
-      <button class="btn" style="background: #6f42c1; color: white;" onclick="supabase.auth.getSession().then(({ data }) => log('Session dump: ' + JSON.stringify(data)))">🔍 Dump Session</button>
-      <div id="notesHistory">
-        <h3>📚 Your Notes History</h3>
-        <div id="notesList"></div>
-      </div>
+      <div id="userInfo" style="text-align:center;margin-bottom:20px"></div>
+      <button id="logoutBtn" class="btn-logout">🚪 Logout</button>
+
+      <textarea id="noteText" placeholder="Write your note…"></textarea>
+      <button id="saveBtn" class="btn-save">💾 Save Note</button>
+
+      <div id="notesList"></div>
     </div>
   </div>
 
-  <script>
-    function log(message) {
-      const debug = document.getElementById('debug');
-      const time = new Date().toLocaleTimeString();
-      debug.textContent += `\\n${time}: ${message}`;
-      debug.scrollTop = debug.scrollHeight;
-    }
+<script>
+/* ---------- helpers ---------- */
+const dbg  = document.getElementById('debug');
+function log(msg){
+  dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
+  dbg.scrollTop   = dbg.scrollHeight;
+}
 
-    function showStatus(message, type = 'success') {
-      const status = document.getElementById('status');
-      status.textContent = message;
-      status.className = 'status ' + type;
-      status.classList.remove('hidden');
-      setTimeout(() => status.classList.add('hidden'), 4000);
-    }
+/* ---------- Supabase ---------- */
+const URL = 'https://pmceyfxrrbyipwmedfqc.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU';
+window.sb = supabase.createClient(URL, KEY);                // make global
 
-    const supabase = supabase.createClient(
-      'https://pmceyfxrrbyipwmedfqc.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU'
-    );
+/* ---------- elements ---------- */
+const loginSec   = document.getElementById('loginSection');
+const userSec    = document.getElementById('userSection');
+const userInfo   = document.getElementById('userInfo');
+const loginBtn   = document.getElementById('loginBtn');
+const logoutBtn  = document.getElementById('logoutBtn');
+const saveBtn    = document.getElementById('saveBtn');
+const noteText   = document.getElementById('noteText');
+const notesList  = document.getElementById('notesList');
 
-    let currentUser = null;
-    let offlineNotes = [];
+let currentUser = null;
 
-    const loginBtn = document.getElementById('loginBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const saveBtn = document.getElementById('saveBtn');
-    const noteText = document.getElementById('noteText');
-    const notesList = document.getElementById('notesList');
-    const loginSection = document.getElementById('loginSection');
-    const userSection = document.getElementById('userSection');
-    const userAvatar = document.getElementById('userAvatar');
-    const userEmail = document.getElementById('userEmail');
+/* ---------- UI helpers ---------- */
+function updateUI(){
+  if(currentUser){
+    loginSec.classList.add('hidden');
+    userSec.classList.remove('hidden');
+    userInfo.textContent = `Logged in as ${currentUser.email}`;
+  }else{
+    userSec.classList.add('hidden');
+    loginSec.classList.remove('hidden');
+    userInfo.textContent = '';
+    noteText.value = '';
+    notesList.innerHTML = '';
+  }
+}
 
-    loginBtn.addEventListener('click', async () => {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.href }
-      });
-      if (error) {
-        log('Login error: ' + error.message);
-        showStatus('Login failed', 'error');
-      }
-    });
+/* ---------- note helpers ---------- */
+async function loadNotes(){
+  const {data,error} = await sb
+      .from('notes')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at',{ascending:false});
+  if(error){ log('Load notes error: '+error.message); return; }
 
-    logoutBtn.addEventListener('click', async () => {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        log('Logout error: ' + error.message);
-        showStatus('Logout failed', 'error');
-      } else {
-        currentUser = null;
-        loginSection.classList.remove('hidden');
-        userSection.classList.add('hidden');
-        noteText.value = '';
-        notesList.innerHTML = '';
-        log('Logged out');
-        showStatus('Logged out', 'success');
-      }
-    });
+  notesList.innerHTML='';
+  data.forEach(n=>{
+    const wrap=document.createElement('div'); wrap.className='note';
+    wrap.innerHTML = `<div class="meta">${new Date(n.created_at).toLocaleString()}</div>
+                      <div>${n.content}</div>`;
+    notesList.appendChild(wrap);
+  });
+  log(`Loaded ${data.length} notes`);
+}
 
-    saveBtn.addEventListener('click', async () => {
-      const content = noteText.value.trim();
-      if (!content || !currentUser) {
-        showStatus('Write something or log in', 'error');
-        return;
-      }
-      const { data, error } = await supabase
+/* ---------- event wiring ---------- */
+loginBtn.onclick = async()=>{
+  log('Login button clicked');
+  const {error}=await sb.auth.signInWithOAuth({
+    provider:'google',
+    options:{redirectTo:location.href}
+  });
+  if(error) log('OAuth error: '+error.message);
+};
+
+logoutBtn.onclick = async()=>{
+  log('Logout button clicked');
+  const {error}=await sb.auth.signOut();
+  if(error){ log('Logout error: '+error.message); return; }
+  log('Logout successful');
+};
+
+saveBtn.onclick = async()=>{
+  const content = noteText.value.trim();
+  if(!content){ log('Empty note – ignored'); return; }
+
+  const {data,error} = await sb
         .from('notes')
-        .insert({ user_id: currentUser.id, content })
-        .select();
-      if (error) {
-        log('Save error: ' + error.message);
-        showStatus('Save failed', 'error');
-      } else {
-        offlineNotes.unshift(data[0]);
-        displayNotes();
-        noteText.value = '';
-        showStatus('Note saved!', 'success');
-      }
-    });
+        .insert({user_id:currentUser.id,content})
+        .select();                       // returns inserted row
+  if(error){ log('Insert error: '+error.message); return; }
 
-    function displayNotes() {
-      notesList.innerHTML = '';
-      if (!offlineNotes.length) {
-        notesList.innerHTML = '<div style="text-align:center; color:gray">No notes yet</div>';
-        return;
-      }
-      offlineNotes.forEach(n => {
-        const div = document.createElement('div');
-        div.className = 'note-item';
-        div.innerHTML = '<div class="note-meta">' + new Date(n.created_at).toLocaleString() + '</div><div class="note-content">' + n.content + '</div>';
-        notesList.appendChild(div);
-      });
-    }
+  log('Note saved');
+  noteText.value='';
+  await loadNotes();
+};
 
-    async function loadNotes() {
-      const { data, error } = await supabase
-        .from('notes')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false });
-      if (data) {
-        offlineNotes = data;
-        displayNotes();
-      }
-    }
+/* ---------- auth state ---------- */
+sb.auth.onAuthStateChange(async(event,session)=>{
+  log('Auth event: '+event);
+  currentUser = session?.user || null;
+  updateUI();
+  if(currentUser) await loadNotes();
+});
 
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session && session.user) {
-        currentUser = session.user;
-        loginSection.classList.add('hidden');
-        userSection.classList.remove('hidden');
-        userEmail.textContent = currentUser.email;
-        userAvatar.src = currentUser.user_metadata.avatar_url || '';
-        await loadNotes();
-        log('User logged in');
-      } else {
-        currentUser = null;
-        loginSection.classList.remove('hidden');
-        userSection.classList.add('hidden');
-        log('User logged out');
-      }
-    });
-
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session && session.user) {
-        currentUser = session.user;
-        loginSection.classList.add('hidden');
-        userSection.classList.remove('hidden');
-        userEmail.textContent = currentUser.email;
-        userAvatar.src = currentUser.user_metadata.avatar_url || '';
-        await loadNotes();
-        log('Session restored');
-      } else {
-        log('No session');
-      }
-    })();
-  </script>
+/* ---------- restore session on first load ---------- */
+(async()=>{
+  const {data:{session}} = await sb.auth.getSession();
+  currentUser = session?.user || null;
+  updateUI();
+  if(currentUser) await loadNotes();
+  log('Initial session check complete');
+})();
+</script>
 </body>
 </html>
