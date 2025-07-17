@@ -610,12 +610,33 @@
             });
             
             // Check for existing session
-            supabase.auth.getSession().then(({ data: { session } }) => {
+            supabase.auth.getSession().then(({ data: { session }, error }) => {
+                log('=== INITIAL SESSION CHECK ===');
+                log(`Session error: ${error ? error.message : 'none'}`);
+                log(`Session exists: ${session ? 'YES' : 'NO'}`);
+                
                 if (session) {
-                    log('Existing session found');
+                    log(`✅ Found existing session`);
+                    log(`User: ${session.user.email}`);
+                    log(`User ID: ${session.user.id}`);
+                    log(`Access token exists: ${session.access_token ? 'YES' : 'NO'}`);
+                    log(`Access token length: ${session.access_token ? session.access_token.length : 0}`);
+                    log(`Refresh token exists: ${session.refresh_token ? 'YES' : 'NO'}`);
+                    log(`Token expires: ${session.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : 'unknown'}`);
+                    log(`Token expired: ${session.expires_at ? (Date.now() / 1000 > session.expires_at ? 'YES' : 'NO') : 'unknown'}`);
+                    
+                    // Show first 20 and last 20 characters of access token
+                    if (session.access_token) {
+                        const token = session.access_token;
+                        log(`Token preview: ${token.substring(0, 20)}...${token.substring(token.length - 20)}`);
+                    }
                 } else {
-                    log('No existing session');
+                    log('❌ No existing session found');
                 }
+                
+                log('=== SESSION CHECK COMPLETE ===');
+            }).catch(err => {
+                log(`Session check failed: ${err.message}`);
             });
             
             log('App initialized successfully ✓');
