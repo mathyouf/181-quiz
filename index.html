@@ -42,9 +42,9 @@
             padding: 15px;
             margin-bottom: 20px;
             font-family: monospace;
-            font-size: 12px;
+            font-size: 14px;
             white-space: pre-wrap;
-            max-height: 150px;
+            max-height: 200px;
             overflow-y: auto;
         }
 
@@ -63,6 +63,10 @@
         .btn-google {
             background: #4285f4;
             color: white;
+        }
+
+        .btn-google:hover {
+            background: #3367d6;
         }
 
         .btn-logout {
@@ -113,7 +117,6 @@
             margin-bottom: 15px;
             text-align: center;
             font-weight: 500;
-            display: none;
         }
 
         .status.success {
@@ -132,17 +135,24 @@
             display: none;
         }
 
+        #notesHistory {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #dee2e6;
+        }
+
+        #notesHistory h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
         .note-item {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 10px;
-        }
-
-        .note-item.offline {
-            border-left: 4px solid #ffc107;
-            background: #fff3cd;
         }
 
         .note-meta {
@@ -155,27 +165,15 @@
             white-space: pre-wrap;
             word-wrap: break-word;
         }
-
-        #notesHistory {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 2px solid #dee2e6;
-        }
-
-        #notesHistory h3 {
-            color: #333;
-            margin-bottom: 15px;
-            text-align: center;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📝 Notes App</h1>
         
-        <div id="debug" class="debug">Starting app...</div>
+        <div id="debug" class="debug">App starting...</div>
         
-        <div id="status" class="status"></div>
+        <div id="status" class="status hidden"></div>
         
         <!-- Login Section -->
         <div id="loginSection">
@@ -194,6 +192,8 @@
             
             <textarea id="noteText" placeholder="Write your note here..."></textarea>
             <button id="saveBtn" class="btn btn-save">💾 Save Note</button>
+            <button id="testBtn" class="btn" style="background: #ffc107; color: #000;">🔧 Test Database</button>
+            <button id="rlsTestBtn" class="btn" style="background: #17a2b8; color: white;">🔓 Test RLS Bypass</button>
             
             <div id="notesHistory">
                 <h3>📚 Your Notes History</h3>
@@ -203,10 +203,11 @@
     </div>
 
     <script>
-        // Simple logging
+        // Simple debug logger
         function log(message) {
             const debug = document.getElementById('debug');
-            debug.textContent += `${new Date().toLocaleTimeString()}: ${message}\n`;
+            const time = new Date().toLocaleTimeString();
+            debug.textContent += `\n${time}: ${message}`;
             debug.scrollTop = debug.scrollHeight;
         }
 
@@ -214,219 +215,410 @@
             const status = document.getElementById('status');
             status.textContent = message;
             status.className = `status ${type}`;
-            status.style.display = 'block';
-            setTimeout(() => status.style.display = 'none', 3000);
+            status.classList.remove('hidden');
+            setTimeout(() => status.classList.add('hidden'), 5000);
         }
 
-        // Wait for page to load
+        // Initialize everything when page loads
         window.addEventListener('load', function() {
-            log('App starting...');
+            log('Page loaded, initializing...');
             
+            // Check if Supabase loaded
             if (!window.supabase) {
                 log('ERROR: Supabase not loaded');
+                showStatus('Supabase library failed to load', 'error');
                 return;
             }
+            
+            log('Supabase library loaded ✓');
             
             // Initialize Supabase
             const supabaseUrl = 'https://pmceyfxrrbyipwmedfqc.supabase.co';
             const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU';
+            
             const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+            log('Supabase client created ✓');
             
-            log('Supabase initialized');
-            
-            // DOM elements
+            // Get DOM elements
             const loginSection = document.getElementById('loginSection');
             const userSection = document.getElementById('userSection');
             const loginBtn = document.getElementById('loginBtn');
             const logoutBtn = document.getElementById('logoutBtn');
             const saveBtn = document.getElementById('saveBtn');
+            const testBtn = document.getElementById('testBtn');
+            const rlsTestBtn = document.getElementById('rlsTestBtn');
             const userAvatar = document.getElementById('userAvatar');
             const userEmail = document.getElementById('userEmail');
             const noteText = document.getElementById('noteText');
             const notesList = document.getElementById('notesList');
             
             let currentUser = null;
-            let offlineNotes = [];
+            let offlineNotes = []; // Store notes locally when database is down
             
-            // Login
+            // Login button click
             loginBtn.addEventListener('click', async function() {
-                log('Login clicked');
+                log('Login button clicked');
+                
                 try {
-                    const { error } = await supabase.auth.signInWithOAuth({
-                        provider: 'google'
+                    log('Starting Google OAuth...');
+                    showStatus('Connecting to Google...', 'success');
+                    
+                    const { data, error } = await supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: {
+                            redirectTo: window.location.origin + window.location.pathname
+                        }
                     });
                     
                     if (error) {
-                        log(`Login error: ${error.message}`);
+                        log(`OAuth error: ${error.message}`);
                         showStatus(`Login failed: ${error.message}`, 'error');
+                    } else {
+                        log('OAuth initiated, should redirect...');
                     }
                 } catch (err) {
-                    log(`Login exception: ${err.message}`);
-                    showStatus('Login failed', 'error');
+                    log(`Exception: ${err.message}`);
+                    showStatus(`Error: ${err.message}`, 'error');
                 }
             });
             
-            // Logout
+            // Logout button
             logoutBtn.addEventListener('click', async function() {
-                log('Logout clicked');
-                await supabase.auth.signOut();
+                log('Logout button clicked');
+                try {
+                    showStatus('Signing out...', 'success');
+                    const { error } = await supabase.auth.signOut();
+                    if (error) {
+                        log(`Logout error: ${error.message}`);
+                        showStatus(`Logout failed: ${error.message}`, 'error');
+                    } else {
+                        log('Successfully signed out');
+                        showStatus('Signed out successfully', 'success');
+                    }
+                } catch (err) {
+                    log(`Logout exception: ${err.message}`);
+                    showStatus(`Logout error: ${err.message}`, 'error');
+                }
             });
             
-            // Save note
-            saveBtn.addEventListener('click', async function() {
+            // Test database button
+            testBtn.addEventListener('click', async function() {
+                log('=== TESTING DATABASE ===');
+                
                 if (!currentUser) {
-                    showStatus('Not logged in', 'error');
+                    log('ERROR: No user logged in');
+                    showStatus('Please log in first', 'error');
                     return;
                 }
-                
-                const content = noteText.value.trim();
-                if (!content) {
-                    showStatus('Please write something', 'error');
-                    return;
-                }
-                
-                log('Saving note...');
-                showStatus('Saving...');
                 
                 try {
-                    // Try database with short timeout
-                    const { data, error } = await Promise.race([
-                        supabase.from('notes').insert({
-                            user_id: currentUser.id,
-                            content: content
-                        }).select(),
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('timeout')), 3000)
-                        )
+                    // Test 1: Simple select to check table exists
+                    log('Test 1: Checking if notes table exists...');
+                    
+                    const { data: tableCheck, error: tableError } = await Promise.race([
+                        supabase.from('notes').select('*').limit(1),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
                     ]);
                     
-                    if (error) throw error;
+                    log(`Table check - Error: ${tableError ? JSON.stringify(tableError) : 'null'}`);
+                    log(`Table check - Data: ${tableCheck ? 'table exists' : 'no data'}`);
                     
-                    log('Saved to database');
-                    showStatus('Note saved!');
-                    noteText.value = '';
-                    loadNotes();
+                    if (tableError) {
+                        if (tableError.message.includes('relation "notes" does not exist')) {
+                            log('ERROR: Notes table does not exist!');
+                            showStatus('Notes table not found! Create it in Supabase SQL Editor', 'error');
+                            return;
+                        }
+                        log(`OTHER TABLE ERROR: ${tableError.message}`);
+                        showStatus(`Table error: ${tableError.message}`, 'error');
+                        return;
+                    }
                     
-                } catch (err) {
-                    log(`Database failed: ${err.message}`);
+                    log('✅ Notes table exists');
                     
-                    // Save offline
-                    const note = {
-                        id: Date.now(),
-                        content: content,
-                        created_at: new Date().toISOString(),
-                        offline: true
+                    // Test 2: Try to insert a test note
+                    log('Test 2: Trying to insert test note...');
+                    const testNote = {
+                        user_id: currentUser.id,
+                        content: `Test note ${Date.now()}`
                     };
                     
-                    offlineNotes.unshift(note);
-                    noteText.value = '';
-                    displayNotes();
+                    log(`Test note: ${JSON.stringify(testNote)}`);
                     
-                    log('Saved offline');
-                    showStatus('Saved offline');
-                }
-            });
-            
-            // Load notes from database
-            async function loadNotes() {
-                if (!currentUser) return;
-                
-                try {
-                    const { data, error } = await Promise.race([
-                        supabase.from('notes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+                    const { data: insertData, error: insertError } = await Promise.race([
+                        supabase.from('notes').insert(testNote).select(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Insert timeout')), 10000))
                     ]);
                     
-                    if (error) throw error;
+                    log(`Insert result - Error: ${insertError ? JSON.stringify(insertError) : 'null'}`);
+                    log(`Insert result - Data: ${insertData ? JSON.stringify(insertData) : 'null'}`);
                     
-                    // Combine with offline notes
-                    const allNotes = [...offlineNotes, ...(data || [])];
-                    displayAllNotes(allNotes);
+                    if (insertError) {
+                        log(`INSERT FAILED: ${insertError.message}`);
+                        showStatus(`Insert error: ${insertError.message}`, 'error');
+                        
+                        // Check for common RLS errors
+                        if (insertError.message.includes('RLS') || insertError.message.includes('policy')) {
+                            log('This looks like a Row Level Security issue');
+                            showStatus('Row Level Security blocking insert. Check your policies!', 'error');
+                        }
+                    } else {
+                        log('✅ INSERT SUCCESS!');
+                        showStatus('Database test passed!', 'success');
+                        loadNotes();
+                    }
                     
                 } catch (err) {
-                    log(`Load failed: ${err.message}`);
-                    displayNotes(); // Show offline only
+                    log(`TEST EXCEPTION: ${err.message}`);
+                    if (err.message === 'Timeout' || err.message === 'Insert timeout') {
+                        log('DATABASE TIMEOUT - connection issue');
+                        showStatus('Database timeout - check connection', 'error');
+                    } else {
+                        showStatus(`Test failed: ${err.message}`, 'error');
+                    }
                 }
-            }
+                
+                log('=== DATABASE TEST COMPLETE ===');
+            });
+
+            // RLS Test button
+            rlsTestBtn.addEventListener('click', async function() {
+                log('=== TESTING RLS BYPASS ===');
+                
+                if (!currentUser) {
+                    log('ERROR: No user logged in');
+                    showStatus('Please log in first', 'error');
+                    return;
+                }
+                
+                try {
+                    log('Testing direct insert without RLS...');
+                    
+                    // First check what user ID we're using
+                    log(`Current user ID: ${currentUser.id}`);
+                    log(`Current user email: ${currentUser.email}`);
+                    
+                    // Test with service role to bypass RLS (if we had it)
+                    // For now, let's check the auth.uid() function
+                    const { data: authCheck, error: authError } = await supabase
+                        .rpc('auth_uid_check');
+                    
+                    log(`Auth UID check: ${authCheck}, error: ${authError ? authError.message : 'none'}`);
+                    
+                    // Try a simple select to see if RLS is the issue
+                    const { data: selectTest, error: selectError } = await Promise.race([
+                        supabase.from('notes').select('count').eq('user_id', currentUser.id),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Select timeout')), 3000))
+                    ]);
+                    
+                    log(`Select test - Error: ${selectError ? JSON.stringify(selectError) : 'null'}`);
+                    log(`Select test - Data: ${selectTest ? JSON.stringify(selectTest) : 'null'}`);
+                    
+                    if (selectError) {
+                        if (selectError.message.includes('auth.uid()')) {
+                            log('RLS PROBLEM: auth.uid() function issue detected');
+                            showStatus('RLS auth.uid() problem - check policies', 'error');
+                        } else {
+                            log(`Other select error: ${selectError.message}`);
+                            showStatus(`Select error: ${selectError.message}`, 'error');
+                        }
+                    } else {
+                        log('✅ SELECT works - RLS seems OK for reads');
+                        showStatus('Can read from table - RLS read OK', 'success');
+                    }
+                    
+                } catch (err) {
+                    log(`RLS TEST EXCEPTION: ${err.message}`);
+                    showStatus(`RLS test failed: ${err.message}`, 'error');
+                }
+                
+                log('=== RLS TEST COMPLETE ===');
+            });
+            saveBtn.addEventListener('click', async function() {
+                log('=== SAVE BUTTON CLICKED ===');
+                
+                if (!currentUser) {
+                    log('ERROR: No current user');
+                    showStatus('Not logged in!', 'error');
+                    return;
+                }
+                
+                log(`Current user: ${currentUser.email}`);
+                log(`User ID: ${currentUser.id}`);
+                
+                const noteContent = noteText.value.trim();
+                log(`Note content: "${noteContent}"`);
+                log(`Content length: ${noteContent.length}`);
+                
+                if (!noteContent) {
+                    log('ERROR: Empty note content');
+                    showStatus('Please write something first!', 'error');
+                    return;
+                }
+                
+                log('Starting save process...');
+                showStatus('Saving...', 'success');
+                
+                try {
+                    log('Calling supabase.from(notes).insert...');
+                    
+                    const insertData = {
+                        user_id: currentUser.id,
+                        content: noteContent
+                    };
+                    log(`Insert data: ${JSON.stringify(insertData)}`);
+                    
+                    const response = await supabase
+                        .from('notes')
+                        .insert(insertData);
+                    
+                    log(`Response received: ${JSON.stringify(response)}`);
+                    log(`Error: ${response.error ? JSON.stringify(response.error) : 'null'}`);
+                    log(`Data: ${response.data ? JSON.stringify(response.data) : 'null'}`);
+                    
+                    if (response.error) {
+                        log(`SAVE FAILED: ${response.error.message}`);
+                        log(`Error code: ${response.error.code}`);
+                        log(`Error details: ${response.error.details}`);
+                        log(`Error hint: ${response.error.hint}`);
+                        showStatus(`Save failed: ${response.error.message}`, 'error');
+                    } else {
+                        log('SAVE SUCCESS - clearing form and reloading');
+                        showStatus('Note saved!', 'success');
+                        noteText.value = ''; // Clear the input
+                        log('Form cleared, now loading notes...');
+                        await loadNotes(); // Reload the notes list
+                        log('Notes reload completed');
+                    }
+                } catch (err) {
+                    log(`EXCEPTION during save: ${err.message}`);
+                    log(`Exception stack: ${err.stack}`);
+                    showStatus(`Save error: ${err.message}`, 'error');
+                }
+                
+                log('=== SAVE PROCESS COMPLETE ===');
+            });
             
-            // Display offline notes only
+            // Function to display notes (combines database + offline)
             function displayNotes() {
+                log('Displaying notes...');
                 notesList.innerHTML = '';
                 
                 if (offlineNotes.length === 0) {
-                    notesList.innerHTML = '<p style="text-align: center; color: #666;">No notes yet</p>';
+                    notesList.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">No notes yet. Write your first note above!</div>';
                     return;
                 }
                 
-                offlineNotes.forEach(note => {
-                    const div = document.createElement('div');
-                    div.className = 'note-item offline';
-                    div.innerHTML = `
-                        <div class="note-meta">📱 Offline - ${new Date(note.created_at).toLocaleString()}</div>
-                        <div class="note-content">${note.content}</div>
-                    `;
-                    notesList.appendChild(div);
+                offlineNotes.forEach((note, index) => {
+                    const noteItem = document.createElement('div');
+                    noteItem.className = 'note-item';
+                    
+                    if (note.offline) {
+                        noteItem.style.borderLeft = '4px solid #ffc107';
+                        noteItem.style.backgroundColor = '#fff3cd';
+                    }
+                    
+                    const noteMeta = document.createElement('div');
+                    noteMeta.className = 'note-meta';
+                    noteMeta.textContent = `${note.offline ? '📱 Offline - ' : ''}Saved: ${new Date(note.created_at).toLocaleString()}`;
+                    
+                    const noteContent = document.createElement('div');
+                    noteContent.className = 'note-content';
+                    noteContent.textContent = note.content;
+                    
+                    noteItem.appendChild(noteMeta);
+                    noteItem.appendChild(noteContent);
+                    notesList.appendChild(noteItem);
                 });
-            }
-            
-            // Display all notes (database + offline)
-            function displayAllNotes(notes) {
-                notesList.innerHTML = '';
                 
-                if (notes.length === 0) {
-                    notesList.innerHTML = '<p style="text-align: center; color: #666;">No notes yet</p>';
+                log(`Displayed ${offlineNotes.length} notes`);
+            }
+            // Function to load and display notes
+            async function loadNotes() {
+                log('=== LOADING NOTES ===');
+                
+                if (!currentUser) {
+                    log('ERROR: No current user for loading notes');
                     return;
                 }
                 
-                notes.forEach(note => {
-                    const div = document.createElement('div');
-                    div.className = note.offline ? 'note-item offline' : 'note-item';
-                    div.innerHTML = `
-                        <div class="note-meta">${note.offline ? '📱 Offline - ' : ''}${new Date(note.created_at).toLocaleString()}</div>
-                        <div class="note-content">${note.content}</div>
-                    `;
-                    notesList.appendChild(div);
-                });
+                try {
+                    // Try to load from database with short timeout
+                    const response = await Promise.race([
+                        supabase.from('notes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Load timeout')), 3000))
+                    ]);
+                    
+                    if (response.error) {
+                        throw new Error(response.error.message);
+                    }
+                    
+                    // Merge database notes with offline notes
+                    const dbNotes = response.data || [];
+                    offlineNotes = [...offlineNotes, ...dbNotes];
+                    
+                    log(`Loaded ${dbNotes.length} notes from database`);
+                    
+                } catch (err) {
+                    log(`Database load failed: ${err.message}`);
+                    log('Using offline notes only');
+                }
+                
+                displayNotes();
+                log('=== LOAD NOTES COMPLETE ===');
             }
-            
-            // Auth state changes
-            supabase.auth.onAuthStateChange((event, session) => {
-                log(`Auth: ${event}`);
+            supabase.auth.onAuthStateChange(async (event, session) => {
+                log(`Auth event: ${event}`);
                 
                 if (event === 'SIGNED_IN' && session) {
                     currentUser = session.user;
-                    log(`Signed in: ${currentUser.email}`);
+                    log(`User signed in: ${currentUser.email}`);
                     
+                    // Show user section
                     loginSection.classList.add('hidden');
                     userSection.classList.remove('hidden');
                     
+                    // Update user info
                     userEmail.textContent = currentUser.email;
                     userAvatar.src = currentUser.user_metadata.avatar_url || '';
                     
-                    loadNotes();
+                    // Load existing note
+                    try {
+                        const { data, error } = await supabase
+                            .from('notes')
+                            .select('content')
+                            .eq('user_id', currentUser.id)
+                            .single();
+                        
+                        if (data) {
+                            noteText.value = data.content || '';
+                            log('Existing note loaded');
+                        }
+                    } catch (err) {
+                        log(`Note load error: ${err.message}`);
+                    }
                     
                 } else if (event === 'SIGNED_OUT') {
                     currentUser = null;
-                    offlineNotes = [];
-                    log('Signed out');
+                    log('User signed out');
                     
+                    // Show login section
                     loginSection.classList.remove('hidden');
                     userSection.classList.add('hidden');
                     noteText.value = '';
-                    notesList.innerHTML = '';
                 }
             });
             
             // Check for existing session
             supabase.auth.getSession().then(({ data: { session } }) => {
                 if (session) {
-                    log('Found existing session');
+                    log('Existing session found');
                 } else {
                     log('No existing session');
                 }
             });
             
-            log('App ready');
+            log('App initialized successfully ✓');
         });
     </script>
 </body>
