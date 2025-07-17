@@ -193,6 +193,7 @@
             <textarea id="noteText" placeholder="Write your note here..."></textarea>
             <button id="saveBtn" class="btn btn-save">💾 Save Note</button>
             <button id="testBtn" class="btn" style="background: #ffc107; color: #000;">🔧 Test Database</button>
+            <button id="rlsTestBtn" class="btn" style="background: #17a2b8; color: white;">🔓 Test RLS Bypass</button>
             
             <div id="notesHistory">
                 <h3>📚 Your Notes History</h3>
@@ -245,6 +246,7 @@
             const logoutBtn = document.getElementById('logoutBtn');
             const saveBtn = document.getElementById('saveBtn');
             const testBtn = document.getElementById('testBtn');
+            const rlsTestBtn = document.getElementById('rlsTestBtn');
             const userAvatar = document.getElementById('userAvatar');
             const userEmail = document.getElementById('userEmail');
             const noteText = document.getElementById('noteText');
@@ -377,6 +379,60 @@
                 }
                 
                 log('=== DATABASE TEST COMPLETE ===');
+            });
+
+            // RLS Test button
+            rlsTestBtn.addEventListener('click', async function() {
+                log('=== TESTING RLS BYPASS ===');
+                
+                if (!currentUser) {
+                    log('ERROR: No user logged in');
+                    showStatus('Please log in first', 'error');
+                    return;
+                }
+                
+                try {
+                    log('Testing direct insert without RLS...');
+                    
+                    // First check what user ID we're using
+                    log(`Current user ID: ${currentUser.id}`);
+                    log(`Current user email: ${currentUser.email}`);
+                    
+                    // Test with service role to bypass RLS (if we had it)
+                    // For now, let's check the auth.uid() function
+                    const { data: authCheck, error: authError } = await supabase
+                        .rpc('auth_uid_check');
+                    
+                    log(`Auth UID check: ${authCheck}, error: ${authError ? authError.message : 'none'}`);
+                    
+                    // Try a simple select to see if RLS is the issue
+                    const { data: selectTest, error: selectError } = await Promise.race([
+                        supabase.from('notes').select('count').eq('user_id', currentUser.id),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Select timeout')), 3000))
+                    ]);
+                    
+                    log(`Select test - Error: ${selectError ? JSON.stringify(selectError) : 'null'}`);
+                    log(`Select test - Data: ${selectTest ? JSON.stringify(selectTest) : 'null'}`);
+                    
+                    if (selectError) {
+                        if (selectError.message.includes('auth.uid()')) {
+                            log('RLS PROBLEM: auth.uid() function issue detected');
+                            showStatus('RLS auth.uid() problem - check policies', 'error');
+                        } else {
+                            log(`Other select error: ${selectError.message}`);
+                            showStatus(`Select error: ${selectError.message}`, 'error');
+                        }
+                    } else {
+                        log('✅ SELECT works - RLS seems OK for reads');
+                        showStatus('Can read from table - RLS read OK', 'success');
+                    }
+                    
+                } catch (err) {
+                    log(`RLS TEST EXCEPTION: ${err.message}`);
+                    showStatus(`RLS test failed: ${err.message}`, 'error');
+                }
+                
+                log('=== RLS TEST COMPLETE ===');
             });
             saveBtn.addEventListener('click', async function() {
                 log('=== SAVE BUTTON CLICKED ===');
