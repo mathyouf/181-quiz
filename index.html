@@ -244,6 +244,7 @@
             const loginBtn = document.getElementById('loginBtn');
             const logoutBtn = document.getElementById('logoutBtn');
             const saveBtn = document.getElementById('saveBtn');
+            const testBtn = document.getElementById('testBtn');
             const userAvatar = document.getElementById('userAvatar');
             const userEmail = document.getElementById('userEmail');
             const noteText = document.getElementById('noteText');
@@ -297,7 +298,85 @@
                 }
             });
             
-            // Save note button
+            // Test database button
+            testBtn.addEventListener('click', async function() {
+                log('=== TESTING DATABASE ===');
+                
+                if (!currentUser) {
+                    log('ERROR: No user logged in');
+                    showStatus('Please log in first', 'error');
+                    return;
+                }
+                
+                try {
+                    // Test 1: Simple select to check table exists
+                    log('Test 1: Checking if notes table exists...');
+                    
+                    const { data: tableCheck, error: tableError } = await Promise.race([
+                        supabase.from('notes').select('*').limit(1),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                    ]);
+                    
+                    log(`Table check - Error: ${tableError ? JSON.stringify(tableError) : 'null'}`);
+                    log(`Table check - Data: ${tableCheck ? 'table exists' : 'no data'}`);
+                    
+                    if (tableError) {
+                        if (tableError.message.includes('relation "notes" does not exist')) {
+                            log('ERROR: Notes table does not exist!');
+                            showStatus('Notes table not found! Create it in Supabase SQL Editor', 'error');
+                            return;
+                        }
+                        log(`OTHER TABLE ERROR: ${tableError.message}`);
+                        showStatus(`Table error: ${tableError.message}`, 'error');
+                        return;
+                    }
+                    
+                    log('✅ Notes table exists');
+                    
+                    // Test 2: Try to insert a test note
+                    log('Test 2: Trying to insert test note...');
+                    const testNote = {
+                        user_id: currentUser.id,
+                        content: `Test note ${Date.now()}`
+                    };
+                    
+                    log(`Test note: ${JSON.stringify(testNote)}`);
+                    
+                    const { data: insertData, error: insertError } = await Promise.race([
+                        supabase.from('notes').insert(testNote).select(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Insert timeout')), 10000))
+                    ]);
+                    
+                    log(`Insert result - Error: ${insertError ? JSON.stringify(insertError) : 'null'}`);
+                    log(`Insert result - Data: ${insertData ? JSON.stringify(insertData) : 'null'}`);
+                    
+                    if (insertError) {
+                        log(`INSERT FAILED: ${insertError.message}`);
+                        showStatus(`Insert error: ${insertError.message}`, 'error');
+                        
+                        // Check for common RLS errors
+                        if (insertError.message.includes('RLS') || insertError.message.includes('policy')) {
+                            log('This looks like a Row Level Security issue');
+                            showStatus('Row Level Security blocking insert. Check your policies!', 'error');
+                        }
+                    } else {
+                        log('✅ INSERT SUCCESS!');
+                        showStatus('Database test passed!', 'success');
+                        loadNotes();
+                    }
+                    
+                } catch (err) {
+                    log(`TEST EXCEPTION: ${err.message}`);
+                    if (err.message === 'Timeout' || err.message === 'Insert timeout') {
+                        log('DATABASE TIMEOUT - connection issue');
+                        showStatus('Database timeout - check connection', 'error');
+                    } else {
+                        showStatus(`Test failed: ${err.message}`, 'error');
+                    }
+                }
+                
+                log('=== DATABASE TEST COMPLETE ===');
+            });
             saveBtn.addEventListener('click', async function() {
                 log('=== SAVE BUTTON CLICKED ===');
                 
