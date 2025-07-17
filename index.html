@@ -75,61 +75,55 @@ window.addEventListener("unhandledrejection", e=>log("⚠️  "+e.reason));
 
 /* ---------- CLIENT ---------- */
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-const sb=createClient(URL,KEY,{
-  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+const sb = createClient(URL, KEY, {
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
 });
 log("✅ Client ready");
 
-  /* ---- one‑time cleanup (empty or token hash) ---- */
-if (location.hash) {
-  history.replaceState({}, "", location.pathname + location.search);
-  log("🔧 stripped initial hash");
-}
-
-
 /* ---------- ELEMENTS ---------- */
-const loginSec=document.getElementById("loginSection");
-const userSec =document.getElementById("userSection");
-const loginBtn=document.getElementById("loginBtn");
-const logoutBtn=document.getElementById("logoutBtn");
-const saveBtn =document.getElementById("saveBtn");
-const pingBtn =document.getElementById("pingBtn");
-const noteTxt =document.getElementById("noteText");
-const list    =document.getElementById("notesList");
-const userInfo=document.getElementById("userInfo");
+const loginSec = document.getElementById("loginSection");
+const userSec  = document.getElementById("userSection");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn= document.getElementById("logoutBtn");
+const saveBtn  = document.getElementById("saveBtn");
+const pingBtn  = document.getElementById("pingBtn");
+const noteTxt  = document.getElementById("noteText");
+const list     = document.getElementById("notesList");
+const userInfo = document.getElementById("userInfo");
 
 let currentUser=null;
 function updateUI(){
   if(currentUser){
-    loginSec.classList.add("hidden");userSec.classList.remove("hidden");
-    userInfo.textContent=`Logged in as ${currentUser.email}`;
+    loginSec.classList.add("hidden"); userSec.classList.remove("hidden");
+    userInfo.textContent = `Logged in as ${currentUser.email}`;
   }else{
-    userSec.classList.add("hidden");loginSec.classList.remove("hidden");
-    userInfo.textContent="";noteTxt.value="";list.innerHTML="";
+    userSec.classList.add("hidden");  loginSec.classList.remove("hidden");
+    userInfo.textContent=""; noteTxt.value=""; list.innerHTML="";
   }
 }
 
 /* ---------- SAFE WRAPPER ---------- */
 async function safe(label, fn){
-  const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),8000);
+  const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(),8000);
   try{
-    let {data,error}=await fn(ctrl.signal);
+    let {data,error} = await fn(ctrl.signal);
     if(error?.status===401){
       log("🔄 token expired; refreshing");
       await sb.auth.refreshSession();
-      ({data,error}=await fn(ctrl.signal));
+      ({data,error} = await fn(ctrl.signal));
     }
     if(error) throw error;
     return data;
-  }catch(e){log(`❌ ${label}: ${e.message}`);show(e.message,false);}
-  finally{clearTimeout(t);}
+  }catch(e){ log(`❌ ${label}: ${e.message}`); show(e.message,false); }
+  finally{ clearTimeout(t); }
 }
 
 /* ---------- LOAD & SAVE ---------- */
 async function loadNotes(){
   log("🔄 loadNotes()");
-  const rows=await safe("loadNotes",signal=>
-    sb.from("notes").select("*",{signal}).eq("user_id",currentUser.id)
+  const rows = await safe("loadNotes", signal =>
+    sb.from("notes").select("*",{signal})
+      .eq("user_id", currentUser.id)
       .order("created_at",{ascending:false})
   );
   if(!rows) return;
@@ -137,61 +131,67 @@ async function loadNotes(){
   rows.forEach(r=>{
     const div=document.createElement("div");
     div.className="note";
-    div.innerHTML=`<div class="meta">${new Date(r.created_at).toLocaleString()}</div>${r.content}`;
+    div.innerHTML=
+      `<div class="meta">${new Date(r.created_at).toLocaleString()}</div>${r.content}`;
     list.appendChild(div);
   });
   log(`✅ loaded ${rows.length}`);
 }
 async function saveNote(){
-  const txt=noteTxt.value.trim();if(!txt){show("Write something!",false);return;}
-  await safe("insert",signal=>
-    sb.from("notes").insert({user_id:currentUser.id,content:txt},{signal}).select()
+  const txt = noteTxt.value.trim();
+  if(!txt){ show("Write something!",false); return; }
+  await safe("insert", signal =>
+    sb.from("notes")
+      .insert({user_id:currentUser.id, content:txt},{signal})
+      .select()
   );
-  noteTxt.value="";show("Saved",true);await loadNotes();
+  noteTxt.value=""; show("Saved",true); await loadNotes();
 }
 
 /* ---------- EVENTS ---------- */
-loginBtn.onclick = () =>
-  sb.auth.signInWithOAuth({
-    provider: "google",
-    // send Google back to the bare page (no fragment) → avoids “##access_token”
-    options: { redirectTo: location.origin + location.pathname }
-  });
+loginBtn.onclick = () => sb.auth.signInWithOAuth({
+  provider: "google",
+  options: { redirectTo: location.href }     // original behavior
+});
 
 logoutBtn.onclick = async () => {
+  log("➡️ logout click");
+
   const { error } = await sb.auth.signOut();
-  if (error) { show(error.message, false); }
-  // fallback: clear if the SIGNED_OUT event doesn’t arrive
-  setTimeout(() => {
-    if (sb.auth.getSession().data.session) sb.auth.setSession(null);
-  }, 2000);
+  if (error){ show(error.message,false); return; }
+
+  /* Clean up any leftover # or #access_token fragment */
+  if (location.hash){
+    history.replaceState({}, "", location.pathname + location.search);
+    log("🔧 hash removed after logout");
+  }
+
+  /* fallback: clear session manually if event is missed */
+  setTimeout(()=>{
+    if(sb.auth.getSession().data.session) sb.auth.setSession(null);
+  },2000);
 };
 
-saveBtn.onclick  = saveNote;
-pingBtn.onclick  = () => safe("ping", signal =>
-  sb.from("notes").select("id", { head: true, signal }).limit(1)
+saveBtn.onclick = saveNote;
+pingBtn.onclick = () => safe("ping", signal =>
+  sb.from("notes").select("id",{head:true,signal}).limit(1)
 );
-  
+
 /* ---------- AUTH LISTENER ---------- */
 sb.auth.onAuthStateChange(async (ev, sess) => {
   log("📢 " + ev);
-
-  // remove *any* hash (#access_token… or bare #) once Supabase parsed it
-  if (location.hash) {
-    history.replaceState({}, "", location.pathname + location.search);
-  }
-
   currentUser = sess?.user || null;
   updateUI();
-  if (currentUser && ev !== "SIGNED_OUT") await loadNotes();
+  if(currentUser && ev!=="SIGNED_OUT") await loadNotes();
 });
 
-
 /* ---------- FIRST LOAD ---------- */
-const {data:{session}}=await sb.auth.getSession();
-currentUser=session?.user||null;updateUI();
+const {data:{session}} = await sb.auth.getSession();
+currentUser = session?.user || null;
+updateUI();
 if(currentUser) await loadNotes();
 log("✅ initial session ready");
 </script>
+
 </body>
 </html>
