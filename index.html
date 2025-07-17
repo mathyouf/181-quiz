@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>📝 Supabase Notes (debug)</title>
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📝 Supabase Notes</title>
+
+  <!-- ES‑module SDK (fast, cache‑friendly) -->
+  <script type="module" crossorigin src="https://esm.sh/@supabase/supabase-js@2"></script>
 
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
@@ -12,11 +14,11 @@
          background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
          min-height:100vh;padding:20px}
     .container{max-width:500px;margin:auto;background:#fff;border-radius:20px;
-               padding:25px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+               padding:26px;box-shadow:0 12px 32px rgba(0,0,0,.25)}
     h1{text-align:center;margin-bottom:20px}
     .debug{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
-           padding:10px;font:14px/1.4 monospace;white-space:pre-wrap;
-           height:200px;overflow-y:auto;margin:15px 0}
+           padding:10px;font:14px/1.5 monospace;white-space:pre-wrap;
+           height:200px;overflow-y:auto;margin-bottom:18px}
     button,textarea{width:100%;font-size:16px;padding:14px;border-radius:10px;
                     border:none;margin-bottom:12px}
     button{font-weight:600;cursor:pointer;transition:.25s}
@@ -30,8 +32,8 @@
     #notesList .meta{font-size:12px;color:#6c757d;margin-bottom:6px}
     .hidden{display:none}
     #status{position:fixed;top:0;left:0;right:0;padding:6px;text-align:center;
-            font-weight:600;color:#fff}
-    #status.ok{background:#28a745} #status.err{background:#dc3545}
+            font-weight:600;color:#fff;z-index:50;transition:opacity .3s}
+    #status.ok{background:#28a745}#status.err{background:#dc3545}
   </style>
 </head>
 <body>
@@ -41,12 +43,12 @@
     <h1>📝 Notes App</h1>
     <div id="debug" class="debug">App starting…</div>
 
-    <!-- Login -->
+    <!-- login -->
     <div id="loginSection">
       <button id="loginBtn" class="btn-google">🔐 Sign in with Google</button>
     </div>
 
-    <!-- Main -->
+    <!-- app -->
     <div id="userSection" class="hidden">
       <div id="userInfo" style="text-align:center;margin-bottom:18px"></div>
       <button id="logoutBtn" class="btn-logout">🚪 Logout</button>
@@ -58,118 +60,155 @@
     </div>
   </div>
 
-<script>
-/* ---------- util ---------- */
-const dbg=document.getElementById('debug');
-function log(m){dbg.textContent+=`\\n${new Date().toLocaleTimeString()}: ${m}`;dbg.scrollTop=dbg.scrollHeight;}
-function banner(msg,type){const b=document.getElementById('status');b.textContent=msg;b.className=type?'ok':'err';b.classList.remove('hidden');setTimeout(()=>b.classList.add('hidden'),3000);}
-window.addEventListener('unhandledrejection',e=>{log('❌ Unhandled promise rejection: '+e.reason)});
+<script type="module">
+/* --------------- CONFIG ------------------------------------- */
+const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
+const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
 
-/* ---------- Supabase SDK check ---------- */
-if(!window.supabase||typeof supabase.createClient!=='function'){
-  log('❌ Supabase JS missing');banner('Supabase SDK missing',0);throw new Error('No SDK');
-}
-log('✅ Supabase SDK present');
+/* --------------- helper refs -------------------------------- */
+const dbg   = document.getElementById("debug");
+const banner= document.getElementById("status");
+function log(m){dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${m}`; dbg.scrollTop = dbg.scrollHeight;}
+function show(msg, ok){banner.textContent = msg; banner.className = ok ? "ok" : "err"; banner.classList.remove("hidden"); setTimeout(()=>banner.classList.add("hidden"), 3000);}
+window.addEventListener("unhandledrejection", e=>log("⚠️  Unhandled: "+e.reason));
 
-/* ---------- client ---------- */
-let sb;
-try{
-  sb=supabase.createClient(
-    'https://pmceyfxrrbyipwmedfqc.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU'
-  );
-  log('✅ Client created');
-}catch(e){log('❌ Client fail: '+e.message);banner('Client init error',0);throw e;}
+/* --------------- Supabase client ---------------------------- */
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-/* ---------- elems ---------- */
-const loginSec=document.getElementById('loginSection');
-const userSec =document.getElementById('userSection');
-const userInfo=document.getElementById('userInfo');
-const loginBtn=document.getElementById('loginBtn');
-const logoutBtn=document.getElementById('logoutBtn');
-const saveBtn =document.getElementById('saveBtn');
-const noteText=document.getElementById('noteText');
-const notesList=document.getElementById('notesList');
+const sb = createClient(URL, KEY, {
+  auth:{
+    autoRefreshToken:true,
+    persistSession:true,
+    detectSessionInUrl:true
+  }
+});
+log("✅ Client created");
 
-let currentUser=null;
+/* --------------- elements ---------------------------------- */
+const loginSec  = document.getElementById("loginSection");
+const userSec   = document.getElementById("userSection");
+const loginBtn  = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const saveBtn   = document.getElementById("saveBtn");
+const noteText  = document.getElementById("noteText");
+const notesList = document.getElementById("notesList");
+const userInfo  = document.getElementById("userInfo");
 
-/* ---------- UI ---------- */
+let currentUser = null;
+
+/* --------------- utility ----------------------------------- */
 function updateUI(){
   if(currentUser){
-    loginSec.classList.add('hidden');userSec.classList.remove('hidden');
-    userInfo.textContent=`Logged in as ${currentUser.email}`;
+    loginSec.classList.add("hidden");
+    userSec.classList.remove("hidden");
+    userInfo.textContent = `Logged in as ${currentUser.email}`;
   }else{
-    userSec.classList.add('hidden');loginSec.classList.remove('hidden');
-    notesList.innerHTML='';noteText.value='';userInfo.textContent='';
+    userSec.classList.add("hidden");
+    loginSec.classList.remove("hidden");
+    userInfo.textContent = "";
+    notesList.innerHTML = "";
+    noteText.value = "";
   }
 }
 
-/* ---------- notes ---------- */
-async function loadNotes(){
-  log('🔄 Loading notes…');
-  const {data,error}=await sb.from('notes')
-      .select('*').eq('user_id',currentUser.id)
-      .order('created_at',{ascending:false});
-  if(error){log('❌ loadNotes: '+error.message);banner('Load error',0);return;}
-  notesList.innerHTML='';
-  data.forEach(n=>{
-    const el=document.createElement('div');el.className='note';
-    el.innerHTML=`<div class="meta">${new Date(n.created_at).toLocaleString()}</div>${n.content}`;
-    notesList.appendChild(el);
-  });
-  log(`✅ Loaded ${data.length} notes`);
-}
-
-/* ---------- event handlers ---------- */
-loginBtn.onclick=async()=>{
-  log('➡️ Login click');
-  const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});
-  if(error){log('❌ OAuth: '+error.message);banner('Login error',0);}
-};
-
-logoutBtn.onclick=async()=>{
-  log('➡️ Logout click (start)');
-  const {error}=await sb.auth.signOut();
-  if(error){
-    log('❌ signOut: '+error.message);banner('Logout error',0);
-  }else{
-    log('⬅️ signOut resolved, waiting for SIGNED_OUT event');
-  }
-};
-
-saveBtn.onclick=async()=>{
-  log('➡️ Save click');
-  const content=noteText.value.trim();
-  if(!content){log('✋ Empty note');banner('Write something!',0);return;}
-  log('⏳ inserting…');
+/* --- safe wrapper that retries once on token refresh & times out --- */
+async function safe(op, label=""){  // op is a ()=>Promise<{data,error}>
+  const controller = new AbortController();
+  const timeout = setTimeout(()=>controller.abort(), 10000); // 10 s hard timeout
   try{
-    const {data,error}=await sb.from('notes')
-        .insert({user_id:currentUser.id,content})
-        .select();
-    if(error){log('❌ insert: '+error.message);banner('Insert error',0);return;}
-    log('✅ insert ok -> '+JSON.stringify(data[0]));
-    noteText.value='';banner('Saved',1);
-    await loadNotes();
-  }catch(e){log('❌ insert exception: '+e.message);}
+    let {data,error} = await op({signal:controller.signal});
+    if(error?.status === 401){      // token expired race — refresh then retry
+      log("🔄 Token expired, refreshing…");
+      await sb.auth.refreshSession();
+      ({data,error} = await op({signal:controller.signal}));
+    }
+    if(error) throw error;
+    return data;
+  }catch(e){
+    log(`❌ ${label||"request"}: `+e.message);
+    show(e.message,false);
+    throw e;
+  }finally{
+    clearTimeout(timeout);
+  }
+}
+
+/* --------------- NOTES ------------------------------------- */
+async function loadNotes(){
+  log("🔄 loadNotes()");
+  const rows = await safe(
+    () => sb.from("notes")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("created_at",{ascending:false}),
+    "loadNotes"
+  );
+  notesList.innerHTML = "";
+  rows.forEach(r=>{
+    const div=document.createElement("div");
+    div.className="note";
+    div.innerHTML = `<div class="meta">${new Date(r.created_at).toLocaleString()}</div>${r.content}`;
+    notesList.appendChild(div);
+  });
+  log(`✅ loaded ${rows.length}`);
+}
+
+/* --------------- EVENTS ------------------------------------ */
+loginBtn.onclick = async ()=>{
+  log("➡️ login click");
+  const {error} = await sb.auth.signInWithOAuth({
+    provider:"google",
+    options:{redirectTo:location.href}
+  });
+  if(error){ log("❌ OAuth: "+error.message); show(error.message,false); }
 };
 
-/* ---------- auth events ---------- */
-sb.auth.onAuthStateChange(async(evt,sess)=>{
-  log('📢 Auth event: '+evt);
-  currentUser=sess?.user||null;
+logoutBtn.onclick = async ()=>{
+  log("➡️ logout click");
+  const {error} = await sb.auth.signOut();
+  if(error){
+    log("❌ signOut: "+error.message);
+    show(error.message,false);
+  }else{
+    /* Fallback: some WebViews drop the SIGNED_OUT event */
+    setTimeout(()=>{
+      if(sb.auth.getSession().data.session){
+        log("⚠️  signOut event missing — forcing clear");
+        sb.auth.setSession(null);
+        currentUser=null; updateUI(); show("Logged out",true);
+      }
+    },2000);
+  }
+};
+
+saveBtn.onclick = async ()=>{
+  const content = noteText.value.trim();
+  if(!content){ show("Write something first!",false); return; }
+  await safe(
+    () => sb.from("notes")
+            .insert({user_id:currentUser.id, content})
+            .select(),
+    "insert"
+  );
+  noteText.value = "";
+  show("Saved",true);
+  await loadNotes();
+};
+
+/* --------------- AUTH LISTENER ----------------------------- */
+sb.auth.onAuthStateChange(async(ev,session)=>{
+  log("📢 auth event: "+ev);
+  currentUser = session?.user || null;
   updateUI();
-  if(currentUser && evt!=='SIGNED_OUT'){await loadNotes();}
-  if(evt==='SIGNED_OUT'){banner('Logged out',1);}
+  if(currentUser && ev!=="SIGNED_OUT") await loadNotes();
 });
 
-/* ---------- restore session ---------- */
-(async()=>{
-  const {data:{session}}=await sb.auth.getSession();
-  currentUser=session?.user||null;
-  updateUI();
-  if(currentUser) await loadNotes();
-  log('💾 Initial session done');
-})();
+/* --------------- FIRST LOAD ------------------------------- */
+const {data:{session}} = await sb.auth.getSession();
+currentUser = session?.user || null;
+updateUI();
+if(currentUser) await loadNotes();
+log("✅ initial session ready");
 </script>
 </body>
 </html>
