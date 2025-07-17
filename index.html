@@ -160,11 +160,11 @@ logoutBtn.onclick = async () => {
   const { error } = await sb.auth.signOut();
   if (error){ show(error.message,false); return; }
 
-  /* Clean up any leftover # or #access_token fragment */
-  if (location.hash){
-    history.replaceState({}, "", location.pathname + location.search);
-    log("🔧 hash removed after logout");
-  }
+/* Clean up “#/”, “#access_token…”, or a bare “#” */
+if (location.hash !== "" || location.href.endsWith("#")) {
+  history.replaceState({}, "", location.pathname + location.search);
+  log("🔧 hash removed after logout");
+}
 
   /* fallback: clear session manually if event is missed */
   setTimeout(()=>{
