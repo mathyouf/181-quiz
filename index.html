@@ -60,17 +60,29 @@
   </div>
 </div>
 <script type="module">
-/* -------------------------------------------------- */
-/*  CONFIG                                            */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------
+   SUPABASE CONFIG
+   ------------------------------------------------------------------
+   • We use the “anon” public key — NEVER embed the service‑role key
+     in client‑side code.
+   • detectSessionInUrl:true lets the SDK parse #access_token on login.
+   • persistSession:true stores the session in localStorage so a refresh
+     keeps the user signed‑in.
+------------------------------------------------------------------- */
 const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
 
-/* -------------------------------------------------- */
-/*  HELPERS                                           */
-/* -------------------------------------------------- */
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const sb = createClient(URL, KEY, {
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
+});
+
+/* ------------------------------------------------------------------
+   DOM HELPERS & LOGGING
+   ------------------------------------------------------------------ */
 const dbg    = document.getElementById("debug");
 const banner = document.getElementById("status");
+
 function log(msg){
   dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
   dbg.scrollTop    = dbg.scrollHeight;
@@ -85,18 +97,11 @@ window.addEventListener("unhandledrejection", e =>
   log("⚠️  " + (e.reason?.message || e.reason))
 );
 
-/* -------------------------------------------------- */
-/*  SUPABASE CLIENT                                   */
-/* -------------------------------------------------- */
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-const sb = createClient(URL, KEY, {
-  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
-});
 log("✅ Supabase client ready");
 
-/* -------------------------------------------------- */
-/*  DOM REFERENCES                                    */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------
+   ELEMENT REFERENCES
+------------------------------------------------------------------- */
 const loginSec = document.getElementById("loginSection");
 const userSec  = document.getElementById("userSection");
 const loginBtn = document.getElementById("loginBtn");
@@ -107,9 +112,9 @@ const noteTxt  = document.getElementById("noteText");
 const list     = document.getElementById("notesList");
 const userInfo = document.getElementById("userInfo");
 
-/* -------------------------------------------------- */
-/*  STATE + UI                                        */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------
+   STATE + UI
+------------------------------------------------------------------- */
 let currentUser = null;
 function updateUI(){
   if(currentUser){
@@ -125,9 +130,14 @@ function updateUI(){
   }
 }
 
-/* -------------------------------------------------- */
-/*  HELPER: safe wrapper with 8‑s timeout & token‑refresh */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------
+   safe(label, fn)  — CALL WRAPPER
+   ------------------------------------------------------------------
+   • Adds an 8‑second timeout so a stalled network call never hangs the UI.
+   • Automatically retries once if we hit a 401 during token refresh.
+   • Centralised error → always log + banner in one place.
+   ** ⚠️ Do NOT delete this wrapper. **
+------------------------------------------------------------------- */
 async function safe(label, fn){
   const ctrl = new AbortController();
   const t    = setTimeout(() => ctrl.abort(), 8000);
@@ -142,12 +152,14 @@ async function safe(label, fn){
   }catch(e){
     log(`❌ ${label}: ${e.message}`);
     show(e.message,false);
-  }finally{ clearTimeout(t); }
+  }finally{
+    clearTimeout(t);
+  }
 }
 
-/* -------------------------------------------------- */
-/*  NOTE OPERATIONS                                   */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------
+   NOTE OPERATIONS
+------------------------------------------------------------------- */
 async function loadNotes(){
   log("🔄 loadNotes()");
   const rows = await safe("loadNotes", signal =>
@@ -173,43 +185,56 @@ async function loadNotes(){
 async function saveNote(){
   const text = noteTxt.value.trim();
   if(!text){ show("Write something!",false); return; }
+
   await safe("insert", signal =>
     sb.from("notes")
       .insert({ user_id: currentUser.id, content: text }, { signal })
       .select()
   );
   noteTxt.value = "";
-  show("Saved",true);
+  show("Saved", true);
   await loadNotes();
 }
 
-/* -------------------------------------------------- */
-/*  EVENT HANDLERS                                    */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------
+   EVENT HANDLERS
+------------------------------------------------------------------- */
+
+/* ---- Login ----
+   redirectTo: location.href is OK because Supabase parses the #fragment.
+*/
 loginBtn.onclick = () =>
   sb.auth.signInWithOAuth({
     provider: "google",
-    options : { redirectTo: location.href }   // keep original behaviour
+    options : { redirectTo: location.href }
   });
 
+/* ---- Logout ----
+   We deliberately **reload** the app at a clean URL to:
+     • remove any lingering # / #access_token fragment
+     • start from a fresh state (clears memory leaks)
+   This is simpler and less error‑prone than trying to mutate history.
+   ** ⚠️ Do NOT remove the replace() call; otherwise # may persist. **
+*/
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
 
   const { error } = await sb.auth.signOut();
   if(error){ show(error.message,false); return; }
 
-  /* Always reload at clean URL (removes # or #token) */
   window.location.replace(location.origin + location.pathname);
 };
 
 saveBtn.onclick = saveNote;
+
+/* Optional network test */
 pingBtn.onclick = () => safe("ping", signal =>
-  sb.from("notes").select("id",{head:true,signal}).limit(1)
+  sb.from("notes").select("id",{ head:true, signal }).limit(1)
 );
 
-/* -------------------------------------------------- */
-/*  AUTH LISTENER                                     */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------
+   AUTH LISTENER
+------------------------------------------------------------------- */
 sb.auth.onAuthStateChange(async (ev, sess) => {
   log("📢 " + ev);
   currentUser = sess?.user || null;
@@ -217,15 +242,14 @@ sb.auth.onAuthStateChange(async (ev, sess) => {
   if(currentUser && ev !== "SIGNED_OUT") await loadNotes();
 });
 
-/* -------------------------------------------------- */
-/*  FIRST LOAD                                        */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------
+   FIRST LOAD
+------------------------------------------------------------------- */
 const { data:{ session } } = await sb.auth.getSession();
 currentUser = session?.user || null;
 updateUI();
 if(currentUser) await loadNotes();
 log("✅ initial session ready");
 </script>
-
 </body>
 </html>
