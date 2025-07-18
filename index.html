@@ -6,8 +6,7 @@
   <title>📝 Supabase Notes</title>
 
   <!-- Supabase SDK (ES‑module, works on GitHub Pages) -->
-  <script type="module" crossorigin
-          src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.umd.min.js"></script>
 
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
@@ -59,21 +58,15 @@
     <div id="notesList"></div>
   </div>
 </div>
-<script type="module">
+<script>
 /* ------------------------------------------------------------------
    SUPABASE CONFIG
-   ------------------------------------------------------------------
-   • We use the “anon” public key — NEVER embed the service‑role key
-     in client‑side code.
-   • detectSessionInUrl:true lets the SDK parse #access_token on login.
-   • persistSession:true stores the session in localStorage so a refresh
-     keeps the user signed‑in.
-------------------------------------------------------------------- */
+   ------------------------------------------------------------------ */
 const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
 
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-const sb = createClient(URL, KEY, {
+/*  The UMD bundle exposes window.supabase */
+const sb = window.supabase.createClient(URL, KEY, {
   auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
 });
 
