@@ -4,10 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Minimal Supabase Auth</title>
-
-  <script type="module" crossorigin
-            src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"></script>
-
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -110,15 +106,18 @@
 </div>
 
 <script type="module">
+  // FIX 1: Import createClient directly from the Supabase ESM CDN.
+  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
   const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co"; // REPLACE WITH YOUR SUPABASE PROJECT URL
   const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK6JNGMZtuL_JKLVisDoUxXOrRkTkzupgpd_9IQrJ8"; // REPLACE WITH YOUR SUPABASE ANON PUBLIC KEY
 
   // --- Supabase Client Initialization (Standard Way) ---
   const sb = createClient(URL, KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } // detectSessionInUrl: true is back!
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
 
-  // --- DOM Elements (declared globally, assigned in DOMContentLoaded) ---
+  // --- DOM Elements ---
   let dbg, banner, loginSection, userSection, loginBtn, userInfo, logoutBtn;
 
   // --- Utility Functions ---
@@ -143,7 +142,7 @@
   }
 
   // --- State ---
-  let currentUser = null; // Stores the Supabase user object if logged in
+  let currentUser = null;
 
   // --- UI Update Function ---
   function updateUI() {
@@ -155,7 +154,7 @@
     } else {
       userSection.classList.add("hidden");
       loginSection.classList.remove("hidden");
-      userInfo.textContent = ""; // Clear user info
+      userInfo.textContent = "";
       log("UI: Showing login section.");
     }
   }
@@ -165,7 +164,7 @@
     log("➡️ Login button clicked. Initiating Google OAuth...");
     sb.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: location.href } // Redirects back to the current page
+      options: { redirectTo: window.location.href }
     })
     .catch(error => {
       log(`❌ Error during signInWithOAuth: ${error.message}`);
@@ -175,53 +174,28 @@
 
   const handleLogoutClick = async () => {
     log("➡️ Logout button clicked. Attempting signOut...");
-    try {
-      const { error } = await sb.auth.signOut();
-      if (error) {
-        log(`❌ Error during signOut: ${error.message}`);
-        show(`Logout failed: ${error.message}`, false);
-      } else {
-        log("✅ SignOut successful. Reloading page to clear session.");
-        show("Logged out successfully.", true);
-        // Important: Full page reload clears URL fragments and client-side session state
-        window.location.replace(location.origin + location.pathname);
-      }
-    } catch (e) {
-      log(`❌ Unexpected error during logout: ${e.message}`);
-      show(`Logout failed: ${e.message}`, false);
+    const { error } = await sb.auth.signOut();
+    if (error) {
+      log(`❌ Error during signOut: ${error.message}`);
+      show(`Logout failed: ${error.message}`, false);
+    } else {
+      // NOTE: A full page reload is a robust way to clear state.
+      // This is a good practice.
+      window.location.replace(window.location.origin + window.location.pathname);
     }
   };
 
   // --- Supabase Auth State Listener ---
-  // This listener reacts to state changes after initial load or user actions.
-  sb.auth.onAuthStateChange(async (event, session) => {
+  // FIX 2: Simplified the listener. It's cleaner and less redundant.
+  // The 'session' object is the single source of truth for the user's state.
+  sb.auth.onAuthStateChange((event, session) => {
     log(`📢 Auth Event: ${event}`);
-    console.log("Auth Event Details:", { event, session });
-
-    // The logic here is more simplified, as the initial getSession() handles the first state.
-    // This listener primarily handles subsequent changes (e.g., token refresh, manual sign out)
-    // or provides a redundant check against the initial session.
-    if (session?.user) { // If there's a user object, they are generally signed in
-        currentUser = session.user;
-        updateUI();
-        log(`✅ User active: ${currentUser.email} (Event: ${event}).`);
-    } else { // No user object, implies signed out or initial null session
-        currentUser = null;
-        updateUI();
-        log(`⚠️ Session is null (Event: ${event}). Showing login UI.`);
-    }
-
-    // Special handling for SIGNED_OUT event, just to be explicit
-    if (event === "SIGNED_OUT") {
-      log("✅ User SIGNED_OUT. Ensuring UI reflects logged out state.");
-      currentUser = null; // Confirm state
-      updateUI();
-    }
+    currentUser = session?.user ?? null;
+    updateUI();
   });
 
   // --- Initial Setup (runs after DOM is fully loaded) ---
   document.addEventListener('DOMContentLoaded', async () => {
-    // Assign DOM elements once the document is ready
     dbg = document.getElementById("debug");
     banner = document.getElementById("status");
     loginSection = document.getElementById("loginSection");
@@ -230,30 +204,22 @@
     userInfo = document.getElementById("userInfo");
     logoutBtn = document.getElementById("logoutBtn");
 
-    // Assign event listeners
     loginBtn.onclick = handleLoginClick;
     logoutBtn.onclick = handleLogoutClick;
 
     log("✅ DOM elements ready. Checking initial session...");
 
-    // *** The most important part for standard, robust session handling ***
-    // This call to getSession() will correctly process the URL hash if detectSessionInUrl:true
-    // is set, or retrieve from localStorage. It's the authoritative check on page load.
-    try {
-      const { data: { session } } = await sb.auth.getSession();
-      console.log("Initial getSession() result:", session);
-      currentUser = session?.user || null;
-      updateUI(); // Update UI based on initial session
-      log("✅ Initial session check complete.");
+    // This is a robust pattern: check the session on load to handle
+    // the redirect from Google and correctly set the initial UI state.
+    const { data: { session } } = await sb.auth.getSession();
+    currentUser = session?.user ?? null;
+    updateUI();
+    log("✅ Initial session check complete.");
 
-      // If a session was found, and the URL still has a hash, clean it up for a cleaner URL
-      if (session && window.location.hash) {
-        log("🔍 Cleaning up URL hash after successful session detection.");
-        window.history.replaceState({}, document.title, location.origin + location.pathname);
-      }
-    } catch (e) {
-      log(`❌ Error during initial getSession: ${e.message}`);
-      show(`Failed to check session: ${e.message}`, false);
+    // This is also a best practice: clean the URL after a successful login.
+    if (session && window.location.hash) {
+      log("🔍 Cleaning up URL hash after successful session detection.");
+      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
     }
   });
 </script>
