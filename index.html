@@ -166,6 +166,9 @@ window.addEventListener("unhandledrejection", e =>
 );
 
 log("✅ Supabase client ready");
+console.log("Supabase URL:", URL); // Added for debugging
+console.log("Supabase KEY (first few chars):", KEY.substring(0, 10) + "..."); // Added for debugging
+
 
 /* ------------------------------------------------------------------
    ELEMENT REFERENCES
@@ -246,28 +249,38 @@ async function safe(label, fn){
    PROFILE MANAGEMENT
 ------------------------------------------------------------------- */
 async function loadUserProfile() {
-    if (!currentUser) return;
+    if (!currentUser) { log("loadUserProfile: No currentUser, skipping."); return; }
     log("🔄 loadUserProfile()");
-    const { data, error } = await sb
-        .from('profiles')
-        .select('username')
-        .eq('id', currentUser.id)
-        .single(); // Use single() as there should only be one profile per user
+    try {
+        const { data, error } = await sb
+            .from('profiles')
+            .select('username')
+            .eq('id', currentUser.id)
+            .single();
 
-    if (error && error.code === 'PGRST116') { // PGRST116 means "No rows found"
-        // This case would happen if a user existed BEFORE the trigger/backfill was applied.
-        log("ℹ️ No profile found for current user. It should be auto-generated soon.");
-        currentUsername = null;
-        usernameInput.value = '';
-    } else if (error) {
-        log(`❌ loadUserProfile: ${error.message}`);
-        currentUsername = null;
-    } else if (data) {
-        currentUsername = data.username;
-        usernameInput.value = data.username;
-        log(`✅ User profile loaded: @${currentUsername}`);
+        if (error) {
+            if (error.code === 'PGRST116') { // No rows found
+                log("ℹ️ No profile found for current user (PGRST116). Will be auto-generated.");
+                currentUsername = null;
+                usernameInput.value = '';
+            } else {
+                // For other errors, re-throw to be caught by safe() wrapper if used,
+                // or handle here if called directly. For loadUserProfile, it's called directly
+                // so we catch it here.
+                throw new Error(`DB Error (${error.code}): ${error.message}`);
+            }
+        } else if (data) {
+            currentUsername = data.username;
+            usernameInput.value = data.username;
+            log(`✅ User profile loaded: @${currentUsername}`);
+        }
+    } catch (e) {
+        log(`❌ Error in loadUserProfile: ${e.message}`);
+        show(`Error loading profile: ${e.message}`, false);
+        currentUsername = null; // Ensure state is clear on error
+    } finally {
+        updateUI(); // Always update UI after attempting to load profile
     }
-    updateUI();
 }
 
 async function saveUsername() {
@@ -320,25 +333,32 @@ async function saveUsername() {
    USER AND FRIEND REQUESTS
 ------------------------------------------------------------------- */
 async function loadAllUsersForDropdown() {
+    if (!currentUser) { log("loadAllUsersForDropdown: No currentUser, skipping."); return; }
     log("🔄 Loading all users for dropdown...");
-    // Select from the 'profiles' table to get usernames and IDs
-    const { data, error } = await safe("loadAllUsers", signal =>
-        sb.from('profiles').select('id, username', { signal }).neq('id', currentUser.id) // Exclude current user
-    );
+    try {
+        const data = await safe("loadAllUsersForDropdown", signal =>
+            sb.from('profiles').select('id, username', { signal }).neq('id', currentUser.id)
+        );
+        if (!data) {
+            log("loadAllUsersForDropdown: No data returned or error handled by safe().");
+            allUsers = [];
+            userDropdown.innerHTML = '<option value="">Error loading users</option>';
+            return;
+        }
 
-    if (error) {
-        log(`❌ loadAllUsersForDropdown: ${error.message}`);
-        return;
+        allUsers = data;
+        userDropdown.innerHTML = '<option value="">Select a user by username</option>';
+        allUsers.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user.id;
+            option.textContent = `@${user.username}`;
+            userDropdown.appendChild(option);
+        });
+        log(`✅ Loaded ${allUsers.length} users for dropdown.`);
+    } catch (e) {
+        log(`❌ Error in loadAllUsersForDropdown outer catch: ${e.message}`);
+        show(`Error loading users: ${e.message}`, false);
     }
-    allUsers = data;
-    userDropdown.innerHTML = '<option value="">Select a user by username</option>'; // Updated prompt
-    allUsers.forEach(user => {
-        const option = document.createElement('option');
-        option.value = user.id;
-        option.textContent = `@${user.username}`; // Display username
-        userDropdown.appendChild(option);
-    });
-    log(`✅ Loaded ${allUsers.length} users for dropdown.`);
 }
 
 async function sendFriendRequest() {
@@ -384,43 +404,49 @@ async function sendFriendRequest() {
 }
 
 async function loadIncomingFriendRequests() {
-    if (!currentUser) return;
+    if (!currentUser) { log("loadIncomingFriendRequests: No currentUser, skipping."); return; }
     log("🔄 Loading incoming friend requests...");
-    const { data, error } = await safe("loadIncomingRequests", signal =>
-        sb.from('friends')
-          .select('id, sender_id, profiles!sender_id(username)') // Fetch username from profiles table
-          .eq('receiver_id', currentUser.id)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false })
-          .limit(10)
-    );
+    try {
+        const data = await safe("loadIncomingRequests", signal =>
+            sb.from('friends')
+              .select('id, sender_id, profiles!sender_id(username)')
+              .eq('receiver_id', currentUser.id)
+              .eq('status', 'pending')
+              .order('created_at', { ascending: false })
+              .limit(10)
+        );
+        if (!data) {
+            log("loadIncomingFriendRequests: No data returned or error handled by safe().");
+            incomingRequestsList.innerHTML = "";
+            incomingRequestsList.textContent = "Error loading requests.";
+            return;
+        }
 
-    if (error) {
-        log(`❌ loadIncomingRequests: ${error.message}`);
-        return;
+        incomingRequestsList.innerHTML = "";
+        if (data.length === 0) {
+            incomingRequestsList.textContent = "No pending friend requests.";
+        } else {
+            data.forEach(req => {
+                const div = document.createElement("div");
+                div.className = "friend-request-item";
+                div.innerHTML = `
+                    <span>Request from @${req.profiles.username}</span>
+                    <div class="flex-buttons">
+                        <button class="btn-success" data-request-id="${req.id}" data-action="accept">Accept</button>
+                        <button class="btn-danger" data-request-id="${req.id}" data-action="reject">Reject</button>
+                    </div>
+                `;
+                incomingRequestsList.appendChild(div);
+            });
+            incomingRequestsList.querySelectorAll('button').forEach(button => {
+                button.onclick = handleFriendRequestAction;
+            });
+        }
+        log(`✅ Loaded ${data.length} incoming requests.`);
+    } catch (e) {
+        log(`❌ Error in loadIncomingFriendRequests outer catch: ${e.message}`);
+        show(`Error loading requests: ${e.message}`, false);
     }
-
-    incomingRequestsList.innerHTML = "";
-    if (data.length === 0) {
-        incomingRequestsList.textContent = "No pending friend requests.";
-    } else {
-        data.forEach(req => {
-            const div = document.createElement("div");
-            div.className = "friend-request-item";
-            div.innerHTML = `
-                <span>Request from @${req.profiles.username}</span>
-                <div class="flex-buttons">
-                    <button class="btn-success" data-request-id="${req.id}" data-action="accept">Accept</button>
-                    <button class="btn-danger" data-request-id="${req.id}" data-action="reject">Reject</button>
-                </div>
-            `;
-            incomingRequestsList.appendChild(div);
-        });
-        incomingRequestsList.querySelectorAll('button').forEach(button => {
-            button.onclick = handleFriendRequestAction;
-        });
-    }
-    log(`✅ Loaded ${data.length} incoming requests.`);
 }
 
 async function handleFriendRequestAction(event) {
@@ -453,26 +479,36 @@ async function handleFriendRequestAction(event) {
    NOTE OPERATIONS
 ------------------------------------------------------------------- */
 async function loadNotes(){
-  log("🔄 loadNotes()");
-  const rows = await safe("loadNotes", signal =>
-    sb.from("notes")
-      .select("*, profiles!user_id(username)", { signal }) // Fetch username from profiles table
-      .order("created_at", { ascending:false })
-  );
-  if(!rows) return;
+    if (!currentUser) { log("loadNotes: No currentUser, skipping."); return; }
+    log("🔄 loadNotes()");
+    try {
+        const rows = await safe("loadNotes", signal =>
+            sb.from("notes")
+              .select("*, profiles!user_id(username)", { signal }) // Fetch username from profiles table
+              .order("created_at", { ascending:false })
+        );
+        if(!rows) {
+            log("loadNotes: No data returned or error handled by safe().");
+            list.innerHTML = "Error loading notes.";
+            return;
+        }
 
-  list.innerHTML = "";
-  rows.forEach(r=>{
-    const div = document.createElement("div");
-    div.className = "note";
-    const noteOwner = r.profiles?.username ? `@${r.profiles.username}` : 'Unknown User';
-    div.innerHTML = `
-      <div class="note-owner">${noteOwner}</div>
-      <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
-      ${r.content}`;
-    list.appendChild(div);
-  });
-  log(`✅ loaded ${rows.length} notes`);
+        list.innerHTML = "";
+        rows.forEach(r=>{
+            const div = document.createElement("div");
+            div.className = "note";
+            const noteOwner = r.profiles?.username ? `@${r.profiles.username}` : 'Unknown User';
+            div.innerHTML = `
+              <div class="note-owner">${noteOwner}</div>
+              <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
+              ${r.content}`;
+            list.appendChild(div);
+        });
+        log(`✅ loaded ${rows.length} notes`);
+    } catch (e) {
+        log(`❌ Error in loadNotes outer catch: ${e.message}`);
+        show(`Error loading notes: ${e.message}`, false);
+    }
 }
 
 async function saveNote(){
@@ -534,14 +570,25 @@ pingBtn.onclick = () => safe("ping", signal =>
 ------------------------------------------------------------------- */
 sb.auth.onAuthStateChange(async (ev, sess) => {
   log("📢 " + ev);
+  console.log("Auth Event:", ev); // Debugging
+  console.log("Session object from onAuthStateChange:", sess); // Debugging
+  console.log("User object from onAuthStateChange:", sess?.user); // Debugging
+
   currentUser = sess?.user || null;
   updateUI();
   if(currentUser && ev !== "SIGNED_OUT") {
-    // These functions now depend on currentUsername being set or loaded
-    await loadUserProfile(); // Load or confirm auto-generated username
+    // Calling these with await ensures they complete before moving on
+    await loadUserProfile();
     await loadAllUsersForDropdown();
     await loadIncomingFriendRequests();
     await loadNotes();
+  } else if (ev === "SIGNED_OUT") {
+    log("User signed out. Clearing UI.");
+    // Clear any user-specific data that might linger
+    currentUser = null;
+    currentUsername = null;
+    allUsers = [];
+    updateUI();
   }
 });
 
@@ -549,10 +596,11 @@ sb.auth.onAuthStateChange(async (ev, sess) => {
    FIRST LOAD
 ------------------------------------------------------------------- */
 const { data:{ session } } = await sb.auth.getSession();
+console.log("Initial getSession() data:", session); // Debugging
+console.log("Initial getSession() user:", session?.user); // Debugging
 currentUser = session?.user || null;
 updateUI();
 if(currentUser) {
-    // These functions now depend on currentUsername being set or loaded
     await loadUserProfile();
     await loadAllUsersForDropdown();
     await loadIncomingFriendRequests();
