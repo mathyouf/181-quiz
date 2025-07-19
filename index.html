@@ -1,254 +1,464 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>📝 Supabase Notes</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📝 Supabase Notes</title>
 
-  <!-- Supabase SDK (ES‑module, works on GitHub Pages) -->
-  <script type="module" crossorigin
-          src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"></script>
+    <script type="module" crossorigin
+          src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"></script>
 
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-         min-height:100vh;padding:20px}
-    .container{max-width:500px;margin:auto;background:#fff;border-radius:20px;
-               padding:25px;box-shadow:0 12px 32px rgba(0,0,0,.25)}
-    h1{text-align:center;margin-bottom:20px}
-    .debug{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
-           padding:10px;font:14px/1.5 monospace;white-space:pre-wrap;
-           height:200px;overflow-y:auto;margin-bottom:18px}
-    button,textarea{width:100%;font-size:16px;padding:14px;border-radius:10px;
-                    border:none;margin-bottom:12px}
-    button{font-weight:600;cursor:pointer;transition:.25s}
-    .btn-google{background:#4285f4;color:#fff}.btn-google:hover{background:#3367d6}
-    .btn-logout{background:#dc3545;color:#fff}
-    .btn-save{background:#28a745;color:#fff}
-    textarea{border:2px solid #dee2e6;min-height:160px;resize:vertical}
-    textarea:focus{outline:none;border-color:#4285f4}
-    #notesList .note{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
-                     padding:12px;margin-bottom:8px}
-    #notesList .meta{font-size:12px;color:#6c757d;margin-bottom:6px}
-    .hidden{display:none}
-    #status{position:fixed;top:0;left:0;right:0;padding:6px;text-align:center;
-            font-weight:600;color:#fff;z-index:50;transition:opacity .3s}
-    #status.ok{background:#28a745}#status.err{background:#dc3545}
-  </style>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+         background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+         min-height:100vh;padding:20px}
+    .container{max-width:500px;margin:auto;background:#fff;border-radius:20px;
+               padding:25px;box-shadow:0 12px 32px rgba(0,0,0,.25)}
+    h1{text-align:center;margin-bottom:20px}
+    .debug{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
+           padding:10px;font:14px/1.5 monospace;white-space:pre-wrap;
+           height:200px;overflow-y:auto;margin-bottom:18px}
+    button,textarea,input[type="text"]{width:100%;font-size:16px;padding:14px;border-radius:10px;
+                    border:none;margin-bottom:12px}
+    button{font-weight:600;cursor:pointer;transition:.25s}
+    .btn-google{background:#4285f4;color:#fff}.btn-google:hover{background:#3367d6}
+    .btn-logout{background:#dc3545;color:#fff}
+    .btn-save{background:#28a745;color:#fff}
+    .btn-primary {background:#007bff; color:#fff;} .btn-primary:hover {background:#0056b3;}
+    .btn-success {background:#28a745; color:#fff;} .btn-success:hover {background:#218838;}
+    .btn-danger {background:#dc3545; color:#fff;} .btn-danger:hover {background:#c82333;}
+    textarea, input[type="text"]{border:2px solid #dee2e6;min-height:40px;resize:vertical}
+    textarea:focus, input[type="text"]:focus{outline:none;border-color:#4285f4}
+    #notesList .note{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
+                     padding:12px;margin-bottom:8px}
+    #notesList .meta{font-size:12px;color:#6c757d;margin-bottom:6px}
+    .note-owner { font-weight: bold; margin-bottom: 4px; }
+    .hidden{display:none}
+    #status{position:fixed;top:0;left:0;right:0;padding:6px;text-align:center;
+            font-weight:600;color:#fff;z-index:50;transition:opacity .3s}
+    #status.ok{background:#28a745}#status.err{background:#dc3545}
+
+    /* Styles for dropdown and friend request list */
+    select {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #dee2e6;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        font-size: 16px;
+        background-color: white;
+    }
+    select:focus {
+        outline: none;
+        border-color: #4285f4;
+    }
+    .section-header {
+        margin-top: 20px;
+        margin-bottom: 10px;
+        font-size: 1.2em;
+        font-weight: 600;
+        color: #333;
+    }
+    .friend-request-item {
+        background:#f8f9fa;
+        border:1px solid #dee2e6;
+        border-radius:8px;
+        padding:12px;
+        margin-bottom:8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .friend-request-item button {
+        width: auto;
+        margin-left: 10px;
+        margin-bottom: 0; /* Override global button margin-bottom */
+    }
+    .flex-buttons {
+        display: flex;
+        gap: 8px;
+    }
+  </style>
 </head>
 <body>
 <div id="status" class="hidden"></div>
 
 <div class="container">
-  <h1>📝 Notes App</h1>
-  <div id="debug" class="debug">App starting…</div>
+  <h1>📝 Notes App</h1>
+  <div id="debug" class="debug">App starting…</div>
 
-  <div id="loginSection">
-    <button id="loginBtn" class="btn-google">🔐 Sign in with Google</button>
-  </div>
+  <div id="loginSection">
+    <button id="loginBtn" class="btn-google">🔐 Sign in with Google</button>
+  </div>
 
-  <div id="userSection" class="hidden">
-    <div id="userInfo" style="text-align:center;margin-bottom:18px"></div>
-    <button id="logoutBtn" class="btn-logout">🚪 Logout</button>
+  <div id="userSection" class="hidden">
+    <div id="userInfo" style="text-align:center;margin-bottom:18px"></div>
+    <button id="logoutBtn" class="btn-logout">🚪 Logout</button>
 
-    <textarea id="noteText" placeholder="Write your note…"></textarea>
-    <button id="saveBtn" class="btn-save">💾 Save Note</button>
-    <button id="pingBtn" style="background:#17a2b8;color:#fff">🔍 Ping REST</button>
+    <hr>
+    <div id="friendRequestSection">
+        <div class="section-header">Send Friend Request</div>
+        <select id="userDropdown"></select>
+        <button id="sendFriendRequestBtn" class="btn-primary">Send Request</button>
+    </div>
 
-    <div id="notesList"></div>
-  </div>
+    <hr>
+    <div id="incomingRequestsSection">
+        <div class="section-header">Incoming Friend Requests</div>
+        <div id="incomingRequestsList"></div>
+    </div>
+
+    <hr>
+    <textarea id="noteText" placeholder="Write your note…"></textarea>
+    <button id="saveBtn" class="btn-save">💾 Save Note</button>
+    <button id="pingBtn" style="background:#17a2b8;color:#fff">🔍 Ping REST</button>
+
+    <hr>
+    <div class="section-header">Your Notes and Friends' Notes</div>
+    <div id="notesList"></div>
+  </div>
 </div>
 <script type="module">
 /* ------------------------------------------------------------------
-   SUPABASE CONFIG
-   ------------------------------------------------------------------
-   • We use the “anon” public key — NEVER embed the service‑role key
-     in client‑side code.
-   • detectSessionInUrl:true lets the SDK parse #access_token on login.
-   • persistSession:true stores the session in localStorage so a refresh
-     keeps the user signed‑in.
+   SUPABASE CONFIG
+   ------------------------------------------------------------------
+   • We use the “anon” public key — NEVER embed the service‑role key
+     in client‑side code.
+   • detectSessionInUrl:true lets the SDK parse #access_token on login.
+   • persistSession:true stores the session in localStorage so a refresh
+     keeps the user signed‑in.
 ------------------------------------------------------------------- */
 const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
 
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const sb = createClient(URL, KEY, {
-  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
 });
 
 /* ------------------------------------------------------------------
-   DOM HELPERS & LOGGING
-   ------------------------------------------------------------------ */
-const dbg    = document.getElementById("debug");
+   DOM HELPERS & LOGGING
+   ------------------------------------------------------------------ */
+const dbg    = document.getElementById("debug");
 const banner = document.getElementById("status");
 
 function log(msg){
-  dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
-  dbg.scrollTop    = dbg.scrollHeight;
+  dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
+  dbg.scrollTop    = dbg.scrollHeight;
 }
 function show(msg, ok){
-  banner.textContent = msg;
-  banner.className   = ok ? "ok" : "err";
-  banner.classList.remove("hidden");
-  setTimeout(()=>banner.classList.add("hidden"), 3000);
+  banner.textContent = msg;
+  banner.className   = ok ? "ok" : "err";
+  banner.classList.remove("hidden");
+  setTimeout(()=>banner.classList.add("hidden"), 3000);
 }
 window.addEventListener("unhandledrejection", e =>
-  log("⚠️  " + (e.reason?.message || e.reason))
+  log("⚠️  " + (e.reason?.message || e.reason))
 );
 
 log("✅ Supabase client ready");
 
 /* ------------------------------------------------------------------
-   ELEMENT REFERENCES
+   ELEMENT REFERENCES
 ------------------------------------------------------------------- */
 const loginSec = document.getElementById("loginSection");
-const userSec  = document.getElementById("userSection");
+const userSec  = document.getElementById("userSection");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn= document.getElementById("logoutBtn");
-const saveBtn  = document.getElementById("saveBtn");
-const pingBtn  = document.getElementById("pingBtn");
-const noteTxt  = document.getElementById("noteText");
-const list     = document.getElementById("notesList");
+const saveBtn  = document.getElementById("saveBtn");
+const pingBtn  = document.getElementById("pingBtn");
+const noteTxt  = document.getElementById("noteText");
+const list     = document.getElementById("notesList");
 const userInfo = document.getElementById("userInfo");
 
+// Removed username-related element references
+const userDropdown = document.getElementById("userDropdown");
+const sendFriendRequestBtn = document.getElementById("sendFriendRequestBtn");
+const incomingRequestsList = document.getElementById("incomingRequestsList");
+
 /* ------------------------------------------------------------------
-   STATE + UI
+   STATE + UI
 ------------------------------------------------------------------- */
 let currentUser = null;
+let allUsers = []; // To store users for dropdown
+
 function updateUI(){
-  if(currentUser){
-    loginSec.classList.add("hidden");
-    userSec.classList.remove("hidden");
-    userInfo.textContent = `Logged in as ${currentUser.email}`;
-  }else{
-    userSec.classList.add("hidden");
-    loginSec.classList.remove("hidden");
-    userInfo.textContent = "";
-    noteTxt.value        = "";
-    list.innerHTML       = "";
-  }
+  if(currentUser){
+    loginSec.classList.add("hidden");
+    userSec.classList.remove("hidden");
+    userInfo.textContent = `Logged in as ${currentUser.email}`;
+  }else{
+    userSec.classList.add("hidden");
+    loginSec.classList.remove("hidden");
+    userInfo.textContent = "";
+    noteTxt.value        = "";
+    list.innerHTML       = "";
+    userDropdown.innerHTML = "";
+    incomingRequestsList.innerHTML = "";
+  }
 }
 
 /* ------------------------------------------------------------------
-   safe(label, fn)  — CALL WRAPPER
-   ------------------------------------------------------------------
-   • Adds an 8‑second timeout so a stalled network call never hangs the UI.
-   • Automatically retries once if we hit a 401 during token refresh.
-   • Centralised error → always log + banner in one place.
-   ** ⚠️ Do NOT delete this wrapper. **
+   safe(label, fn)  — CALL WRAPPER
+   ------------------------------------------------------------------
+   • Adds an 8‑second timeout so a stalled network call never hangs the UI.
+   • Automatically retries once if we hit a 401 during token refresh.
+   • Centralised error → always log + banner in one place.
+   ** ⚠️ Do NOT delete this wrapper. **
 ------------------------------------------------------------------- */
 async function safe(label, fn){
-  const ctrl = new AbortController();
-  const t    = setTimeout(() => ctrl.abort(), 8000);
-  try{
-    let { data, error } = await fn(ctrl.signal);
-    if(error?.status === 401){
-      await sb.auth.refreshSession();
-      ({ data, error } = await fn(ctrl.signal));
-    }
-    if(error) throw error;
-    return data;
-  }catch(e){
-    log(`❌ ${label}: ${e.message}`);
-    show(e.message,false);
-  }finally{
-    clearTimeout(t);
-  }
+  const ctrl = new AbortController();
+  const t    = setTimeout(() => ctrl.abort(), 8000);
+  try{
+    let { data, error } = await fn(ctrl.signal);
+    if(error?.status === 401){
+      await sb.auth.refreshSession();
+      ({ data, error } = await fn(ctrl.signal));
+    }
+    if(error) throw error;
+    return data;
+  }catch(e){
+    log(`❌ ${label}: ${e.message}`);
+    show(e.message,false);
+  }finally{
+    clearTimeout(t);
+  }
 }
 
 /* ------------------------------------------------------------------
-   NOTE OPERATIONS
+   USER AND FRIEND REQUESTS
+------------------------------------------------------------------- */
+async function loadAllUsersForDropdown() {
+    log("🔄 Loading all users for dropdown...");
+    // Fetch from the public_users view
+    const { data, error } = await safe("loadAllUsers", signal =>
+        sb.from('public_users').select('id, email', { signal }).neq('id', currentUser.id) // Exclude current user
+    );
+
+    if (error) {
+        log(`❌ loadAllUsersForDropdown: ${error.message}`);
+        return;
+    }
+    allUsers = data;
+    userDropdown.innerHTML = '<option value="">Select a user by email</option>';
+    allUsers.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.email; // Display email
+        userDropdown.appendChild(option);
+    });
+    log(`✅ Loaded ${allUsers.length} users for dropdown.`);
+}
+
+async function sendFriendRequest() {
+    const receiverId = userDropdown.value;
+    if (!receiverId) {
+        show("Please select a user to send a request.", false);
+        return;
+    }
+    if (!currentUser) return;
+
+    // Check for existing request (pending or accepted in either direction)
+    const { data: existingRequest, error: checkError } = await sb
+        .from('friends')
+        .select('id, status')
+        .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUser.id})`)
+        .maybeSingle();
+
+    if (checkError) {
+        show(checkError.message, false);
+        return;
+    }
+
+    if (existingRequest) {
+        if (existingRequest.status === 'pending') {
+            show("A pending friend request already exists with this user.", false);
+        } else if (existingRequest.status === 'accepted') {
+            show("You are already friends with this user.", false);
+        } else { // Rejected or other status
+            show("An interaction with this user already exists.", false);
+        }
+        return;
+    }
+
+    await safe("sendFriendRequest", signal =>
+        sb.from('friends').insert({ sender_id: currentUser.id, receiver_id: receiverId }, { signal }).select()
+    );
+    show("Friend request sent!", true);
+    log(`✅ Sent friend request to ${receiverId}`);
+    userDropdown.value = ""; // Clear selection
+}
+
+async function loadIncomingFriendRequests() {
+    if (!currentUser) return;
+    log("🔄 Loading incoming friend requests...");
+    const { data, error } = await safe("loadIncomingRequests", signal =>
+        sb.from('friends')
+          .select('id, sender_id, public_users!sender_id(email)') // Fetch email from public_users view
+          .eq('receiver_id', currentUser.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(10)
+    );
+
+    if (error) {
+        log(`❌ loadIncomingFriendRequests: ${error.message}`);
+        return;
+    }
+
+    incomingRequestsList.innerHTML = "";
+    if (data.length === 0) {
+        incomingRequestsList.textContent = "No pending friend requests.";
+    } else {
+        data.forEach(req => {
+            const div = document.createElement("div");
+            div.className = "friend-request-item";
+            div.innerHTML = `
+                <span>Request from ${req.public_users.email}</span>
+                <div class="flex-buttons">
+                    <button class="btn-success" data-request-id="${req.id}" data-action="accept">Accept</button>
+                    <button class="btn-danger" data-request-id="${req.id}" data-action="reject">Reject</button>
+                </div>
+            `;
+            incomingRequestsList.appendChild(div);
+        });
+        incomingRequestsList.querySelectorAll('button').forEach(button => {
+            button.onclick = handleFriendRequestAction;
+        });
+    }
+    log(`✅ Loaded ${data.length} incoming requests.`);
+}
+
+async function handleFriendRequestAction(event) {
+    const requestId = event.target.dataset.requestId;
+    const action = event.target.dataset.action; // 'accept' or 'reject'
+    if (!requestId) return;
+
+    const { error } = await safe(`${action}FriendRequest`, signal =>
+        sb.from('friends')
+          .update({ status: action === 'accept' ? 'accepted' : 'rejected' }, { signal })
+          .eq('id', requestId)
+          .eq('receiver_id', currentUser.id)
+    );
+
+    if (error) {
+        show(`Failed to ${action} request: ${error.message}`, false);
+    } else {
+        show(`Request ${action}ed!`, true);
+        log(`✅ Friend request ${action}ed: ${requestId}`);
+        await loadIncomingFriendRequests();
+        await loadNotes();
+    }
+}
+
+/* ------------------------------------------------------------------
+   NOTE OPERATIONS
 ------------------------------------------------------------------- */
 async function loadNotes(){
-  log("🔄 loadNotes()");
-  const rows = await safe("loadNotes", signal =>
-    sb.from("notes")
-      .select("*", { signal })
-      .eq("user_id", currentUser.id)
-      .order("created_at", { ascending:false })
-  );
-  if(!rows) return;
+  log("🔄 loadNotes()");
+  const rows = await safe("loadNotes", signal =>
+    sb.from("notes")
+      .select("*, public_users!user_id(email)", { signal }) // Fetch email from public_users view
+      .order("created_at", { ascending:false })
+  );
+  if(!rows) return;
 
-  list.innerHTML = "";
-  rows.forEach(r=>{
-    const div = document.createElement("div");
-    div.className = "note";
-    div.innerHTML = `
-      <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
-      ${r.content}`;
-    list.appendChild(div);
-  });
-  log(`✅ loaded ${rows.length}`);
+  list.innerHTML = "";
+  rows.forEach(r=>{
+    const div = document.createElement("div");
+    div.className = "note";
+    const noteOwnerEmail = r.public_users?.email || 'Unknown User'; // Use email
+    div.innerHTML = `
+      <div class="note-owner">${noteOwnerEmail}</div>
+      <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
+      ${r.content}`;
+    list.appendChild(div);
+  });
+  log(`✅ loaded ${rows.length} notes`);
 }
 
 async function saveNote(){
-  const text = noteTxt.value.trim();
-  if(!text){ show("Write something!",false); return; }
+  const text = noteTxt.value.trim();
+  if(!text){ show("Write something!",false); return; }
+  if(!currentUser) { show("Please sign in to save notes.", false); return; }
 
-  await safe("insert", signal =>
-    sb.from("notes")
-      .insert({ user_id: currentUser.id, content: text }, { signal })
-      .select()
-  );
-  noteTxt.value = "";
-  show("Saved", true);
-  await loadNotes();
+  await safe("insert", signal =>
+    sb.from("notes")
+      .insert({ user_id: currentUser.id, content: text }, { signal })
+      .select()
+  );
+  noteTxt.value = "";
+  show("Saved", true);
+  await loadNotes();
 }
 
 /* ------------------------------------------------------------------
-   EVENT HANDLERS
+   EVENT HANDLERS
 ------------------------------------------------------------------- */
 
 /* ---- Login ----
-   redirectTo: location.href is OK because Supabase parses the #fragment.
+   redirectTo: location.href is OK because Supabase parses the #fragment.
 */
 loginBtn.onclick = () =>
-  sb.auth.signInWithOAuth({
-    provider: "google",
-    options : { redirectTo: location.href }
-  });
+  sb.auth.signInWithOAuth({
+    provider: "google",
+    options : { redirectTo: location.href }
+  });
 
 /* ---- Logout ----
-   We deliberately **reload** the app at a clean URL to:
-     • remove any lingering # / #access_token fragment
-     • start from a fresh state (clears memory leaks)
-   This is simpler and less error‑prone than trying to mutate history.
-   ** ⚠️ Do NOT remove the replace() call; otherwise # may persist. **
+   We deliberately **reload** the app at a clean URL to:
+     • remove any lingering # / #access_token fragment
+     • start from a fresh state (clears memory leaks)
+   This is simpler and less error‑prone than trying to mutate history.
+   ** ⚠️ Do NOT remove the replace() call; otherwise # may persist. **
 */
 logoutBtn.onclick = async () => {
-  log("➡️ logout click");
+  log("➡️ logout click");
 
-  const { error } = await sb.auth.signOut();
-  if(error){ show(error.message,false); return; }
+  const { error } = await sb.auth.signOut();
+  if(error){ show(error.message,false); return; }
 
-  window.location.replace(location.origin + location.pathname);
+  window.location.replace(location.origin + location.pathname);
 };
 
 saveBtn.onclick = saveNote;
+// Removed saveUsernameBtn and its handler
+sendFriendRequestBtn.onclick = sendFriendRequest;
+
 
 /* Optional network test */
 pingBtn.onclick = () => safe("ping", signal =>
-  sb.from("notes").select("id",{ head:true, signal }).limit(1)
+  sb.from("notes").select("id",{ head:true, signal }).limit(1)
 );
 
 /* ------------------------------------------------------------------
-   AUTH LISTENER
+   AUTH LISTENER
 ------------------------------------------------------------------- */
 sb.auth.onAuthStateChange(async (ev, sess) => {
-  log("📢 " + ev);
-  currentUser = sess?.user || null;
-  updateUI();
-  if(currentUser && ev !== "SIGNED_OUT") await loadNotes();
+  log("📢 " + ev);
+  currentUser = sess?.user || null;
+  updateUI();
+  if(currentUser && ev !== "SIGNED_OUT") {
+    // No loadUserProfile needed as email comes from auth.user
+    await loadAllUsersForDropdown();
+    await loadIncomingFriendRequests();
+    await loadNotes();
+  }
 });
 
 /* ------------------------------------------------------------------
-   FIRST LOAD
+   FIRST LOAD
 ------------------------------------------------------------------- */
 const { data:{ session } } = await sb.auth.getSession();
 currentUser = session?.user || null;
 updateUI();
-if(currentUser) await loadNotes();
+if(currentUser) {
+    // No loadUserProfile needed
+    await loadAllUsersForDropdown();
+    await loadIncomingFriendRequests();
+    await loadNotes();
+}
 log("✅ initial session ready");
 </script>
 </body>
