@@ -176,7 +176,7 @@ console.log("Supabase KEY (first few chars):", KEY.substring(0, 10) + "..."); //
 const loginSec = document.getElementById("loginSection");
 const userSec  = document.getElementById("userSection");
 const loginBtn = document.getElementById("loginBtn");
-const logoutBtn= document.getElementById("logoutBtn");
+const logoutBtn= document.getElementById("logoutBtn"); // Check this element in console
 const saveBtn  = document.getElementById("saveBtn");
 const pingBtn  = document.getElementById("pingBtn");
 const noteTxt  = document.getElementById("noteText");
@@ -264,9 +264,6 @@ async function loadUserProfile() {
                 currentUsername = null;
                 usernameInput.value = '';
             } else {
-                // For other errors, re-throw to be caught by safe() wrapper if used,
-                // or handle here if called directly. For loadUserProfile, it's called directly
-                // so we catch it here.
                 throw new Error(`DB Error (${error.code}): ${error.message}`);
             }
         } else if (data) {
@@ -277,9 +274,9 @@ async function loadUserProfile() {
     } catch (e) {
         log(`❌ Error in loadUserProfile: ${e.message}`);
         show(`Error loading profile: ${e.message}`, false);
-        currentUsername = null; // Ensure state is clear on error
+        currentUsername = null;
     } finally {
-        updateUI(); // Always update UI after attempting to load profile
+        updateUI();
     }
 }
 
@@ -299,7 +296,7 @@ async function saveUsername() {
         .from('profiles')
         .select('id')
         .eq('username', newUsername)
-        .not('id', 'eq', currentUser.id) // Ensure it's not the current user's existing username
+        .not('id', 'eq', currentUser.id)
         .maybeSingle();
 
     if (existingError) {
@@ -307,7 +304,7 @@ async function saveUsername() {
         return;
     }
 
-    if (existingUser) { // If data is not null, a different user has this username
+    if (existingUser) {
         show("Username already taken! Please choose another.", false);
         return;
     }
@@ -407,13 +404,9 @@ async function loadIncomingFriendRequests() {
     if (!currentUser) { log("loadIncomingFriendRequests: No currentUser, skipping."); return; }
     log("🔄 Loading incoming friend requests...");
     try {
+        // Use RPC function
         const data = await safe("loadIncomingRequests", signal =>
-            sb.from('friends')
-              .select('id, sender_id, profiles!sender_id(username)')
-              .eq('receiver_id', currentUser.id)
-              .eq('status', 'pending')
-              .order('created_at', { ascending: false })
-              .limit(10)
+            sb.rpc('get_incoming_friend_requests_with_username', { signal })
         );
         if (!data) {
             log("loadIncomingFriendRequests: No data returned or error handled by safe().");
@@ -427,13 +420,14 @@ async function loadIncomingFriendRequests() {
             incomingRequestsList.textContent = "No pending friend requests.";
         } else {
             data.forEach(req => {
+                const senderUsername = req.sender_username || 'Unknown User'; // Access from RPC result
                 const div = document.createElement("div");
                 div.className = "friend-request-item";
                 div.innerHTML = `
-                    <span>Request from @${req.profiles.username}</span>
+                    <span>Request from @${senderUsername}</span>
                     <div class="flex-buttons">
-                        <button class="btn-success" data-request-id="${req.id}" data-action="accept">Accept</button>
-                        <button class="btn-danger" data-request-id="${req.id}" data-action="reject">Reject</button>
+                        <button class="btn-success" data-request-id="${req.request_id}" data-action="accept">Accept</button>
+                        <button class="btn-danger" data-request-id="${req.request_id}" data-action="reject">Reject</button>
                     </div>
                 `;
                 incomingRequestsList.appendChild(div);
@@ -482,10 +476,9 @@ async function loadNotes(){
     if (!currentUser) { log("loadNotes: No currentUser, skipping."); return; }
     log("🔄 loadNotes()");
     try {
+        // Use RPC function
         const rows = await safe("loadNotes", signal =>
-            sb.from("notes")
-              .select("*, profiles!user_id(username)", { signal }) // Fetch username from profiles table
-              .order("created_at", { ascending:false })
+            sb.rpc('get_notes_with_owner_username', { signal })
         );
         if(!rows) {
             log("loadNotes: No data returned or error handled by safe().");
@@ -497,11 +490,11 @@ async function loadNotes(){
         rows.forEach(r=>{
             const div = document.createElement("div");
             div.className = "note";
-            const noteOwner = r.profiles?.username ? `@${r.profiles.username}` : 'Unknown User';
+            const noteOwner = r.owner_username ? `@${r.owner_username}` : 'Unknown User'; // Access from RPC result
             div.innerHTML = `
               <div class="note-owner">${noteOwner}</div>
-              <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
-              ${r.content}`;
+              <div class="meta">${new Date(r.note_created_at).toLocaleString()}</div>
+              ${r.note_content}`;
             list.appendChild(div);
         });
         log(`✅ loaded ${rows.length} notes`);
@@ -533,11 +526,13 @@ async function saveNote(){
 /* ---- Login ----
    redirectTo: location.href is OK because Supabase parses the #fragment.
 */
-loginBtn.onclick = () =>
-  sb.auth.signInWithOAuth({
+loginBtn.onclick = () => {
+    console.log("Login button clicked."); // Debugging
+    sb.auth.signInWithOAuth({
     provider: "google",
     options : { redirectTo: location.href }
   });
+}
 
 /* ---- Logout ----
    We deliberately **reload** the app at a clean URL to:
@@ -548,10 +543,16 @@ loginBtn.onclick = () =>
 */
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
+  console.log("Logout button clicked. Attempting signOut..."); // Debugging
 
   const { error } = await sb.auth.signOut();
-  if(error){ show(error.message,false); return; }
+  if(error){
+    console.error("Error during signOut:", error); // Debugging
+    show(error.message,false);
+    return;
+  }
 
+  console.log("SignOut successful. Reloading page..."); // Debugging
   window.location.replace(location.origin + location.pathname);
 };
 
@@ -577,13 +578,14 @@ sb.auth.onAuthStateChange(async (ev, sess) => {
   currentUser = sess?.user || null;
   updateUI();
   if(currentUser && ev !== "SIGNED_OUT") {
-    // Calling these with await ensures they complete before moving on
+    console.log("User is signed in. Loading user data..."); // Debugging
     await loadUserProfile();
     await loadAllUsersForDropdown();
     await loadIncomingFriendRequests();
     await loadNotes();
   } else if (ev === "SIGNED_OUT") {
     log("User signed out. Clearing UI.");
+    console.log("User signed out event detected."); // Debugging
     // Clear any user-specific data that might linger
     currentUser = null;
     currentUsername = null;
@@ -601,11 +603,15 @@ console.log("Initial getSession() user:", session?.user); // Debugging
 currentUser = session?.user || null;
 updateUI();
 if(currentUser) {
+    console.log("Initial session found. Loading user data..."); // Debugging
     await loadUserProfile();
     await loadAllUsersForDropdown();
     await loadIncomingFriendRequests();
     await loadNotes();
 }
 log("✅ initial session ready");
+
+// Add a direct check for the logout button element when the script runs
+console.log("Logout button element at script load:", logoutBtn); // Debugging
 </script></body>
 </html>
