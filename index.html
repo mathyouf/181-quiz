@@ -5,35 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>📝 Supabase Notes</title>
 
-  <!-- Supabase SDK (ES‑module, works on GitHub Pages) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.umd.min.js"></script>
 
   <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-         min-height:100vh;padding:20px}
-    .container{max-width:500px;margin:auto;background:#fff;border-radius:20px;
-               padding:25px;box-shadow:0 12px 32px rgba(0,0,0,.25)}
-    h1{text-align:center;margin-bottom:20px}
-    .debug{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
-           padding:10px;font:14px/1.5 monospace;white-space:pre-wrap;
-           height:200px;overflow-y:auto;margin-bottom:18px}
-    button,textarea{width:100%;font-size:16px;padding:14px;border-radius:10px;
-                    border:none;margin-bottom:12px}
-    button{font-weight:600;cursor:pointer;transition:.25s}
-    .btn-google{background:#4285f4;color:#fff}.btn-google:hover{background:#3367d6}
-    .btn-logout{background:#dc3545;color:#fff}
-    .btn-save{background:#28a745;color:#fff}
-    textarea{border:2px solid #dee2e6;min-height:160px;resize:vertical}
-    textarea:focus{outline:none;border-color:#4285f4}
-    #notesList .note{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
-                     padding:12px;margin-bottom:8px}
-    #notesList .meta{font-size:12px;color:#6c757d;margin-bottom:6px}
-    .hidden{display:none}
-    #status{position:fixed;top:0;left:0;right:0;padding:6px;text-align:center;
-            font-weight:600;color:#fff;z-index:50;transition:opacity .3s}
-    #status.ok{background:#28a745}#status.err{background:#dc3545}
+    /* ... your CSS ... */
   </style>
 </head>
 <body>
@@ -58,6 +33,7 @@
     <div id="notesList"></div>
   </div>
 </div>
+
 <script type="module">
   /* ------------------------------------------------------------------
    SUPABASE CONFIG
@@ -65,7 +41,7 @@
 const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
 
-/*  The UMD bundle exposes window.supabase */
+/* The UMD bundle exposes window.supabase */
 const sb = window.supabase.createClient(URL, KEY, {
   auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
 });
@@ -125,12 +101,7 @@ function updateUI(){
 
 /* ------------------------------------------------------------------
    safe(label, fn)  — CALL WRAPPER
-   ------------------------------------------------------------------
-   • Adds an 8‑second timeout so a stalled network call never hangs the UI.
-   • Automatically retries once if we hit a 401 during token refresh.
-   • Centralised error → always log + banner in one place.
-   ** ⚠️ Do NOT delete this wrapper. **
-------------------------------------------------------------------- */
+   ------------------------------------------------------------------ */
 async function safe(label, fn){
   const ctrl = new AbortController();
   const t    = setTimeout(() => ctrl.abort(), 8000);
@@ -193,22 +164,14 @@ async function saveNote(){
    EVENT HANDLERS
 ------------------------------------------------------------------- */
 
-/* ---- Login ----
-   redirectTo: location.href is OK because Supabase parses the #fragment.
-*/
+/* ---- Login ---- */
 loginBtn.onclick = () =>
   sb.auth.signInWithOAuth({
     provider: "google",
     options : { redirectTo: location.href }
   });
 
-/* ---- Logout ----
-   We deliberately **reload** the app at a clean URL to:
-     • remove any lingering # / #access_token fragment
-     • start from a fresh state (clears memory leaks)
-   This is simpler and less error‑prone than trying to mutate history.
-   ** ⚠️ Do NOT remove the replace() call; otherwise # may persist. **
-*/
+/* ---- Logout ---- */
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
 
