@@ -85,7 +85,7 @@
 <div id="status" class="hidden"></div>
 
 <div class="container">
-  <h1>📝 Notes App</h1>
+  <h1>📝 Supabase Notes</h1>
   <div id="debug" class="debug">App starting…</div>
 
   <div id="loginSection">
@@ -95,6 +95,14 @@
   <div id="userSection" class="hidden">
     <div id="userInfo" style="text-align:center;margin-bottom:18px"></div>
     <button id="logoutBtn" class="btn-logout">🚪 Logout</button>
+
+    <hr>
+    <div id="profileSection">
+        <div class="section-header">Your Profile</div>
+        <input type="text" id="usernameInput" placeholder="Set or change your username" />
+        <button id="saveUsernameBtn" class="btn-primary">Save Username</button>
+        <div id="currentUsername" style="margin-bottom:12px; font-weight:bold;"></div>
+    </div>
 
     <hr>
     <div id="friendRequestSection">
@@ -129,8 +137,8 @@
    • persistSession:true stores the session in localStorage so a refresh
      keeps the user signed‑in.
 ------------------------------------------------------------------- */
-const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
-const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
+const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co"; // REPLACE WITH YOUR SUPABASE PROJECT URL
+const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU"; // REPLACE WITH YOUR SUPABASE ANON PUBLIC KEY
 
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const sb = createClient(URL, KEY, {
@@ -172,7 +180,10 @@ const noteTxt  = document.getElementById("noteText");
 const list     = document.getElementById("notesList");
 const userInfo = document.getElementById("userInfo");
 
-// Removed username-related element references
+// New element references for profiles/friends
+const usernameInput = document.getElementById("usernameInput");
+const saveUsernameBtn = document.getElementById("saveUsernameBtn");
+const currentUsernameDisplay = document.getElementById("currentUsername");
 const userDropdown = document.getElementById("userDropdown");
 const sendFriendRequestBtn = document.getElementById("sendFriendRequestBtn");
 const incomingRequestsList = document.getElementById("incomingRequestsList");
@@ -181,6 +192,7 @@ const incomingRequestsList = document.getElementById("incomingRequestsList");
    STATE + UI
 ------------------------------------------------------------------- */
 let currentUser = null;
+let currentUsername = null;
 let allUsers = []; // To store users for dropdown
 
 function updateUI(){
@@ -188,12 +200,16 @@ function updateUI(){
     loginSec.classList.add("hidden");
     userSec.classList.remove("hidden");
     userInfo.textContent = `Logged in as ${currentUser.email}`;
+    // Show current username or a loading/placeholder message
+    currentUsernameDisplay.textContent = currentUsername ? `Your username: @${currentUsername}` : "Loading username...";
   }else{
     userSec.classList.add("hidden");
     loginSec.classList.remove("hidden");
     userInfo.textContent = "";
     noteTxt.value        = "";
     list.innerHTML       = "";
+    currentUsernameDisplay.textContent = "";
+    usernameInput.value = ""; // Clear username input
     userDropdown.innerHTML = "";
     incomingRequestsList.innerHTML = "";
   }
@@ -227,13 +243,87 @@ async function safe(label, fn){
 }
 
 /* ------------------------------------------------------------------
+   PROFILE MANAGEMENT
+------------------------------------------------------------------- */
+async function loadUserProfile() {
+    if (!currentUser) return;
+    log("🔄 loadUserProfile()");
+    const { data, error } = await sb
+        .from('profiles')
+        .select('username')
+        .eq('id', currentUser.id)
+        .single(); // Use single() as there should only be one profile per user
+
+    if (error && error.code === 'PGRST116') { // PGRST116 means "No rows found"
+        // This case would happen if a user existed BEFORE the trigger/backfill was applied.
+        log("ℹ️ No profile found for current user. It should be auto-generated soon.");
+        currentUsername = null;
+        usernameInput.value = '';
+    } else if (error) {
+        log(`❌ loadUserProfile: ${error.message}`);
+        currentUsername = null;
+    } else if (data) {
+        currentUsername = data.username;
+        usernameInput.value = data.username;
+        log(`✅ User profile loaded: @${currentUsername}`);
+    }
+    updateUI();
+}
+
+async function saveUsername() {
+    const newUsername = usernameInput.value.trim();
+    if (!newUsername) {
+        show("Username cannot be empty!", false);
+        return;
+    }
+    if (!currentUser) {
+        show("Please sign in to save your username.", false);
+        return;
+    }
+
+    // Check if username already exists for another user
+    const { data: existingUser, error: existingError } = await sb
+        .from('profiles')
+        .select('id')
+        .eq('username', newUsername)
+        .not('id', 'eq', currentUser.id) // Ensure it's not the current user's existing username
+        .maybeSingle();
+
+    if (existingError) {
+        show(existingError.message, false);
+        return;
+    }
+
+    if (existingUser) { // If data is not null, a different user has this username
+        show("Username already taken! Please choose another.", false);
+        return;
+    }
+
+    // Upsert (insert or update) the profile
+    const { data, error } = await sb
+        .from('profiles')
+        .upsert({ id: currentUser.id, username: newUsername }, { onConflict: 'id' });
+
+    if (error) {
+        log(`❌ saveUsername: ${error.message}`);
+        show(error.message, false);
+    } else {
+        currentUsername = newUsername;
+        show("Username saved!", true);
+        log(`✅ Username saved: @${newUsername}`);
+        updateUI();
+        await loadAllUsersForDropdown(); // Refresh dropdown after username change
+    }
+}
+
+/* ------------------------------------------------------------------
    USER AND FRIEND REQUESTS
 ------------------------------------------------------------------- */
 async function loadAllUsersForDropdown() {
     log("🔄 Loading all users for dropdown...");
-    // Fetch from the public_users view
+    // Select from the 'profiles' table to get usernames and IDs
     const { data, error } = await safe("loadAllUsers", signal =>
-        sb.from('public_users').select('id, email', { signal }).neq('id', currentUser.id) // Exclude current user
+        sb.from('profiles').select('id, username', { signal }).neq('id', currentUser.id) // Exclude current user
     );
 
     if (error) {
@@ -241,11 +331,11 @@ async function loadAllUsersForDropdown() {
         return;
     }
     allUsers = data;
-    userDropdown.innerHTML = '<option value="">Select a user by email</option>';
+    userDropdown.innerHTML = '<option value="">Select a user by username</option>'; // Updated prompt
     allUsers.forEach(user => {
         const option = document.createElement('option');
         option.value = user.id;
-        option.textContent = user.email; // Display email
+        option.textContent = `@${user.username}`; // Display username
         userDropdown.appendChild(option);
     });
     log(`✅ Loaded ${allUsers.length} users for dropdown.`);
@@ -257,7 +347,10 @@ async function sendFriendRequest() {
         show("Please select a user to send a request.", false);
         return;
     }
-    if (!currentUser) return;
+    if (!currentUser) {
+        show("Please sign in to send friend requests.", false);
+        return;
+    }
 
     // Check for existing request (pending or accepted in either direction)
     const { data: existingRequest, error: checkError } = await sb
@@ -295,7 +388,7 @@ async function loadIncomingFriendRequests() {
     log("🔄 Loading incoming friend requests...");
     const { data, error } = await safe("loadIncomingRequests", signal =>
         sb.from('friends')
-          .select('id, sender_id, public_users!sender_id(email)') // Fetch email from public_users view
+          .select('id, sender_id, profiles!sender_id(username)') // Fetch username from profiles table
           .eq('receiver_id', currentUser.id)
           .eq('status', 'pending')
           .order('created_at', { ascending: false })
@@ -303,7 +396,7 @@ async function loadIncomingFriendRequests() {
     );
 
     if (error) {
-        log(`❌ loadIncomingFriendRequests: ${error.message}`);
+        log(`❌ loadIncomingRequests: ${error.message}`);
         return;
     }
 
@@ -315,7 +408,7 @@ async function loadIncomingFriendRequests() {
             const div = document.createElement("div");
             div.className = "friend-request-item";
             div.innerHTML = `
-                <span>Request from ${req.public_users.email}</span>
+                <span>Request from @${req.profiles.username}</span>
                 <div class="flex-buttons">
                     <button class="btn-success" data-request-id="${req.id}" data-action="accept">Accept</button>
                     <button class="btn-danger" data-request-id="${req.id}" data-action="reject">Reject</button>
@@ -334,12 +427,16 @@ async function handleFriendRequestAction(event) {
     const requestId = event.target.dataset.requestId;
     const action = event.target.dataset.action; // 'accept' or 'reject'
     if (!requestId) return;
+    if (!currentUser) {
+        show("Please sign in to respond to friend requests.", false);
+        return;
+    }
 
     const { error } = await safe(`${action}FriendRequest`, signal =>
         sb.from('friends')
           .update({ status: action === 'accept' ? 'accepted' : 'rejected' }, { signal })
           .eq('id', requestId)
-          .eq('receiver_id', currentUser.id)
+          .eq('receiver_id', currentUser.id) // Ensure only receiver can update
     );
 
     if (error) {
@@ -348,7 +445,7 @@ async function handleFriendRequestAction(event) {
         show(`Request ${action}ed!`, true);
         log(`✅ Friend request ${action}ed: ${requestId}`);
         await loadIncomingFriendRequests();
-        await loadNotes();
+        await loadNotes(); // Reload notes to show new friend's notes
     }
 }
 
@@ -359,7 +456,7 @@ async function loadNotes(){
   log("🔄 loadNotes()");
   const rows = await safe("loadNotes", signal =>
     sb.from("notes")
-      .select("*, public_users!user_id(email)", { signal }) // Fetch email from public_users view
+      .select("*, profiles!user_id(username)", { signal }) // Fetch username from profiles table
       .order("created_at", { ascending:false })
   );
   if(!rows) return;
@@ -368,9 +465,9 @@ async function loadNotes(){
   rows.forEach(r=>{
     const div = document.createElement("div");
     div.className = "note";
-    const noteOwnerEmail = r.public_users?.email || 'Unknown User'; // Use email
+    const noteOwner = r.profiles?.username ? `@${r.profiles.username}` : 'Unknown User';
     div.innerHTML = `
-      <div class="note-owner">${noteOwnerEmail}</div>
+      <div class="note-owner">${noteOwner}</div>
       <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
       ${r.content}`;
     list.appendChild(div);
@@ -423,7 +520,7 @@ logoutBtn.onclick = async () => {
 };
 
 saveBtn.onclick = saveNote;
-// Removed saveUsernameBtn and its handler
+saveUsernameBtn.onclick = saveUsername; // Event listener for saving username
 sendFriendRequestBtn.onclick = sendFriendRequest;
 
 
@@ -440,7 +537,8 @@ sb.auth.onAuthStateChange(async (ev, sess) => {
   currentUser = sess?.user || null;
   updateUI();
   if(currentUser && ev !== "SIGNED_OUT") {
-    // No loadUserProfile needed as email comes from auth.user
+    // These functions now depend on currentUsername being set or loaded
+    await loadUserProfile(); // Load or confirm auto-generated username
     await loadAllUsersForDropdown();
     await loadIncomingFriendRequests();
     await loadNotes();
@@ -454,7 +552,8 @@ const { data:{ session } } = await sb.auth.getSession();
 currentUser = session?.user || null;
 updateUI();
 if(currentUser) {
-    // No loadUserProfile needed
+    // These functions now depend on currentUsername being set or loaded
+    await loadUserProfile();
     await loadAllUsersForDropdown();
     await loadIncomingFriendRequests();
     await loadNotes();
