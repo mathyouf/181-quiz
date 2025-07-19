@@ -113,9 +113,9 @@
   const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co"; // REPLACE WITH YOUR SUPABASE PROJECT URL
   const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK6JNGMZtuL_JKLVisDoUxXOrRkTkzupgpd_9IQrJ8"; // REPLACE WITH YOUR SUPABASE ANON PUBLIC KEY
 
-  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+  // --- Supabase Client Initialization (Standard Way) ---
   const sb = createClient(URL, KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } // detectSessionInUrl: true is back!
   });
 
   // --- DOM Elements (declared globally, assigned in DOMContentLoaded) ---
@@ -123,7 +123,7 @@
 
   // --- Utility Functions ---
   function log(msg) {
-    if (dbg) { // Check if dbg is available
+    if (dbg) {
       dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
       dbg.scrollTop = dbg.scrollHeight;
     } else {
@@ -132,7 +132,7 @@
   }
 
   function show(msg, ok) {
-    if (banner) { // Check if banner is available
+    if (banner) {
       banner.textContent = msg;
       banner.className = ok ? "ok" : "err";
       banner.classList.remove("hidden");
@@ -193,26 +193,29 @@
   };
 
   // --- Supabase Auth State Listener ---
+  // This listener reacts to state changes after initial load or user actions.
   sb.auth.onAuthStateChange(async (event, session) => {
     log(`📢 Auth Event: ${event}`);
-    console.log("Auth Event Details:", { event, session }); // Detailed console log for debugging
+    console.log("Auth Event Details:", { event, session });
 
-    currentUser = session?.user || null;
-    updateUI(); // Always update UI on state change
+    // The logic here is more simplified, as the initial getSession() handles the first state.
+    // This listener primarily handles subsequent changes (e.g., token refresh, manual sign out)
+    // or provides a redundant check against the initial session.
+    if (session?.user) { // If there's a user object, they are generally signed in
+        currentUser = session.user;
+        updateUI();
+        log(`✅ User active: ${currentUser.email} (Event: ${event}).`);
+    } else { // No user object, implies signed out or initial null session
+        currentUser = null;
+        updateUI();
+        log(`⚠️ Session is null (Event: ${event}). Showing login UI.`);
+    }
 
-    if (event === "SIGNED_IN") {
-      log(`✅ User SIGNED_IN: ${currentUser?.email || 'unknown'}.`);
-      // No further data loading needed for this simplified version
-    } else if (event === "SIGNED_OUT") {
-      log("✅ User SIGNED_OUT.");
-      currentUser = null; // Explicitly clear currentUser for consistency
-      updateUI(); // Ensure UI reflects logged out state
-    } else if (event === "TOKEN_REFRESHED") {
-        log("🔄 Token refreshed. Session is still active.");
-    } else if (event === "USER_UPDATED") {
-        log("✏️ User data updated.");
-    } else if (event === "INITIAL_SESSION") {
-        log("ℹ️ Initial session check complete.");
+    // Special handling for SIGNED_OUT event, just to be explicit
+    if (event === "SIGNED_OUT") {
+      log("✅ User SIGNED_OUT. Ensuring UI reflects logged out state.");
+      currentUser = null; // Confirm state
+      updateUI();
     }
   });
 
@@ -232,13 +235,22 @@
     logoutBtn.onclick = handleLogoutClick;
 
     log("✅ DOM elements ready. Checking initial session...");
-    // Check for an existing session when the page first loads
+
+    // *** The most important part for standard, robust session handling ***
+    // This call to getSession() will correctly process the URL hash if detectSessionInUrl:true
+    // is set, or retrieve from localStorage. It's the authoritative check on page load.
     try {
       const { data: { session } } = await sb.auth.getSession();
-      console.log("Initial getSession() result:", session); // Detailed console log
+      console.log("Initial getSession() result:", session);
       currentUser = session?.user || null;
       updateUI(); // Update UI based on initial session
       log("✅ Initial session check complete.");
+
+      // If a session was found, and the URL still has a hash, clean it up for a cleaner URL
+      if (session && window.location.hash) {
+        log("🔍 Cleaning up URL hash after successful session detection.");
+        window.history.replaceState({}, document.title, location.origin + location.pathname);
+      }
     } catch (e) {
       log(`❌ Error during initial getSession: ${e.message}`);
       show(`Failed to check session: ${e.message}`, false);
