@@ -214,10 +214,21 @@ async function saveNote(){
 ------------------------------------------------------------------- */
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
-  await sb.auth.signOut();
-  location.reload();
-};
+  const { error } = await sb.auth.signOut();
 
+  if (error) {
+    log(`⚠️ Logout error: ${error.message}`);
+  }
+
+  // The onAuthStateChange listener will handle the UI update immediately.
+  // We then reload the page after a very short delay to ensure a clean
+  // state and a fresh nonce for the next login attempt.
+  setTimeout(() => {
+    log("🔄 Reloading page to reset state...");
+    location.reload();
+  }, 100); // 100ms delay is enough for the UI to update.
+};
+  
 saveBtn.onclick = saveNote;
 pingBtn.onclick = () => safe("ping", signal =>
   sb.from("notes").select("id",{ head:true, signal }).limit(1)
