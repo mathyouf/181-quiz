@@ -8,7 +8,7 @@
   <script type="module" crossorigin
           src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"></script>
 
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://accounts.google.com/gsi/client?onload=onGoogleScriptLoad" async defer></script>
 
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
@@ -39,8 +39,6 @@
   </style>
 </head>
 <body>
-<div id="status" class="hidden"></div>
-
 <div class="container" style="visibility: hidden;">
   <h1>📝 Notes App</h1>
   <div id="debug" class="debug">App starting…</div>
@@ -222,12 +220,20 @@ pingBtn.onclick = () => safe("ping", signal =>
 /* ------------------------------------------------------------------
  AUTH LISTENER
 ------------------------------------------------------------------- */
-// The listener now ONLY handles live UI updates after the initial load.
-sb.auth.onAuthStateChange((event, session) => {
-  if (event === 'INITIAL_SESSION') return; // The main() function handles the initial load
+// This listener handles all state changes after the initial load.
+sb.auth.onAuthStateChange(async (event, session) => {
+  // The main() function handles the very first session load.
+  // We only care about live events here.
+  if (event === 'INITIAL_SESSION') return; 
+
   log("📢 " + event);
   currentUser = session?.user || null;
   updateUI();
+
+  // 📌 FIX: After a user signs in, load their notes.
+  if (event === 'SIGNED_IN') {
+    await loadNotes();
+  }
 });
 
 /* ------------------------------------------------------------------
@@ -254,10 +260,7 @@ async function initializeGoogleSignIn() {
   log("✅ Google Sign-In initialized.");
 }
 
-// A single, sequential main function to orchestrate the entire startup.
 async function main() {
-  initializeGoogleSignIn();
-
   log("Checking for existing session...");
   const { data: { session } } = await sb.auth.getSession();
   
@@ -270,12 +273,16 @@ async function main() {
     await loadNotes();
   }
 
-  // Make the app visible now that we have the correct state.
   container.style.visibility = 'visible';
   log("✅ App ready.");
 }
 
-main(); // Run the app.
+// 📌 FIX: The main() function now runs inside this callback,
+// ensuring the Google library is loaded first.
+window.onGoogleScriptLoad = () => {
+  initializeGoogleSignIn();
+  main();
+}
 </script>
 </body>
 </html>
