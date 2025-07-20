@@ -8,7 +8,8 @@
   <script type="module" crossorigin
           src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"></script>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
@@ -205,6 +206,9 @@ async function saveNote(){
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
   await sb.auth.signOut();
+  // We reload the page after a short delay. This gives the UI time to update
+  // from the onAuthStateChange event, providing instant feedback to the user.
+  // The reload ensures the app starts in a clean state with a fresh security nonce.
   setTimeout(() => {
     log("🔄 Reloading page to reset state...");
     location.reload();
@@ -219,17 +223,18 @@ pingBtn.onclick = () => safe("ping", signal =>
 /* ------------------------------------------------------------------
  AUTH LISTENER
 ------------------------------------------------------------------- */
-// This listener handles all state changes after the initial load.
+// This listener ONLY handles live events that happen AFTER the initial page load,
+// like a successful sign-in or a session being invalidated from another tab.
 sb.auth.onAuthStateChange(async (event, session) => {
-  // The main() function handles the very first session load.
-  // We only care about live events here.
-  if (event === 'INITIAL_SESSION') return; 
+  // The main() function handles the very first session load. We ignore it here
+  // to prevent running the logic twice.
+  if (event === 'INITIAL_SESSION') return;
 
   log("📢 " + event);
   currentUser = session?.user || null;
   updateUI();
 
-  // 📌 FIX: After a user signs in, load their notes.
+  // If the user just signed in, we need to load their notes.
   if (event === 'SIGNED_IN') {
     await loadNotes();
   }
@@ -239,6 +244,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
  INITIALIZATION
 ------------------------------------------------------------------- */
 async function initializeGoogleSignIn() {
+  // Generates a single-use nonce and its required hash for Google.
   rawNonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
   const encoder = new TextEncoder();
   const data = encoder.encode(rawNonce);
@@ -249,7 +255,7 @@ async function initializeGoogleSignIn() {
   google.accounts.id.initialize({
     client_id: '595304856426-pmat525kv5mechm7sj1g9eqs0cl2qec2.apps.googleusercontent.com',
     callback: handleSignInWithGoogle,
-    nonce: hashedNonce,
+    nonce: hashedNonce, // The hashed nonce is sent to Google.
   });
   google.accounts.id.renderButton(
     document.getElementById('google-button-container'),
@@ -259,6 +265,7 @@ async function initializeGoogleSignIn() {
   log("✅ Google Sign-In initialized.");
 }
 
+// This is the main startup function that controls the initial page load.
 async function main() {
   log("Checking for existing session...");
   const { data: { session } } = await sb.auth.getSession();
@@ -271,18 +278,27 @@ async function main() {
   if (currentUser) {
     await loadNotes();
   }
-
+  // This must be the last step, to unhide the UI in its correct state.
   container.style.visibility = 'visible';
   log("✅ App ready.");
 }
 
-// Use a robust polling method to wait for the Google library.
-const startupInterval = setInterval(() => {
-  if (window.google) {
+// This is the entry point for the entire application.
+// It uses polling to robustly wait for the external Google script to be loaded
+// before attempting to run any code that depends on it.
+const startupInterval = setInterval(async () => {
+  if (window.google?.accounts?.id) {
     clearInterval(startupInterval);
-    // Once the google object is available, we can safely initialize our app.
-    initializeGoogleSignIn();
-    main();
+    // 📌 FIX: We create an async bootstrap function to ensure initialization
+    // happens sequentially, preventing race conditions.
+    try {
+      await initializeGoogleSignIn();
+      await main();
+    } catch (e) {
+      log(`❌ CRITICAL STARTUP ERROR: ${e.message}`);
+      container.style.visibility = 'visible'; // Show the container even on error
+      updateUI(); // Try to show a sensible UI (likely the login button)
+    }
   }
 }, 50);
 </script>
