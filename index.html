@@ -41,7 +41,7 @@
 <body>
 <div id="status" class="hidden"></div>
 
-<div class="container">
+<div class="container" style="visibility: hidden;">
   <h1>📝 Notes App</h1>
   <div id="debug" class="debug">App starting…</div>
 
@@ -110,6 +110,8 @@ const userInfo = document.getElementById("userInfo");
  STATE + UI
 ------------------------------------------------------------------- */
 let currentUser = null;
+let authReady   = false; // Flag to prevent content flash
+
 function updateUI(){
   if(currentUser){
     loginSec.classList.add("hidden");
@@ -121,6 +123,12 @@ function updateUI(){
     userInfo.textContent = "";
     noteTxt.value        = "";
     list.innerHTML       = "";
+  }
+
+  // After the first auth event, make the container visible.
+  if (!authReady) {
+    document.querySelector('.container').style.visibility = 'visible';
+    authReady = true;
   }
 }
 
@@ -153,7 +161,6 @@ let rawNonce = "";
 
 window.handleSignInWithGoogle = async (response) => {
   log("Recieved credential from Google...");
-  
   const result = await safe("signInWithIdToken", () =>
     sb.auth.signInWithIdToken({
       provider: 'google',
@@ -161,7 +168,6 @@ window.handleSignInWithGoogle = async (response) => {
       nonce: rawNonce
     })
   );
-
   if (!result) {
     log("Sign-in failed. Forcing a sign-out to clean up state.");
     await sb.auth.signOut();
@@ -173,7 +179,6 @@ window.handleSignInWithGoogle = async (response) => {
 ------------------------------------------------------------------- */
 async function loadNotes(){
   if (!currentUser) return;
-
   log("🔄 loadNotes()");
   const rows = await safe("loadNotes", signal =>
     sb.from("notes")
@@ -182,14 +187,11 @@ async function loadNotes(){
       .order("created_at", { ascending:false })
   );
   if(!rows) return;
-
   list.innerHTML = "";
   rows.forEach(r=>{
     const div = document.createElement("div");
     div.className = "note";
-    div.innerHTML = `
-      <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
-      ${r.content}`;
+    div.innerHTML = `<div class="meta">${new Date(r.created_at).toLocaleString()}</div>${r.content}`;
     list.appendChild(div);
   });
   log(`✅ loaded ${rows.length}`);
@@ -198,11 +200,9 @@ async function loadNotes(){
 async function saveNote(){
   const text = noteTxt.value.trim();
   if(!text){ show("Write something!",false); return; }
-
   await safe("insert", signal =>
     sb.from("notes")
       .insert({ user_id: currentUser.id, content: text }, { signal })
-      .select()
   );
   noteTxt.value = "";
   show("Saved", true);
@@ -214,45 +214,38 @@ async function saveNote(){
 ------------------------------------------------------------------- */
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
-  const { error } = await sb.auth.signOut();
-
-  if (error) {
-    log(`⚠️ Logout error: ${error.message}`);
-  }
-
-  // The onAuthStateChange listener will handle the UI update immediately.
-  // We then reload the page after a very short delay to ensure a clean
-  // state and a fresh nonce for the next login attempt.
+  await sb.auth.signOut();
   setTimeout(() => {
     log("🔄 Reloading page to reset state...");
     location.reload();
-  }, 100); // 100ms delay is enough for the UI to update.
+  }, 100);
 };
-  
+
 saveBtn.onclick = saveNote;
 pingBtn.onclick = () => safe("ping", signal =>
   sb.from("notes").select("id",{ head:true, signal }).limit(1)
 );
 
 /* ------------------------------------------------------------------
- AUTH LISTENER
+ AUTH LISTENER - THE SINGLE SOURCE OF TRUTH
 ------------------------------------------------------------------- */
 sb.auth.onAuthStateChange(async (event, session) => {
   log("📢 " + event);
   currentUser = session?.user || null;
-  updateUI();
+  updateUI(); // This will now handle all UI changes, including making the app visible.
 
   if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
     await loadNotes();
   }
 });
 
-
 /* ------------------------------------------------------------------
  INITIALIZATION
 ------------------------------------------------------------------- */
-async function initializeGoogleSignIn() {
-  // 📌 FIX: Generate the raw nonce and the required SHA-256 hash.
+// The window.onload block now ONLY handles setting up Google Sign-In.
+// All user state and UI logic is handled by the listener above.
+window.onload = async () => {
+  // Generate nonce and initialize Google Sign-In button
   rawNonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
   const encoder = new TextEncoder();
   const data = encoder.encode(rawNonce);
@@ -263,7 +256,7 @@ async function initializeGoogleSignIn() {
   google.accounts.id.initialize({
     client_id: '595304856426-pmat525kv5mechm7sj1g9eqs0cl2qec2.apps.googleusercontent.com',
     callback: handleSignInWithGoogle,
-    nonce: hashedNonce, // Pass the HASHED nonce to Google
+    nonce: hashedNonce,
     context: 'signin',
     ux_mode: 'popup',
     auto_select: true,
@@ -276,17 +269,7 @@ async function initializeGoogleSignIn() {
   );
 
   google.accounts.id.prompt();
-}
-
-window.onload = async () => {
-  await initializeGoogleSignIn();
-
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    currentUser = session.user;
-    updateUI();
-  }
-  log("✅ App and Google Sign-In initialized.");
+  log("✅ Google Sign-In initialized.");
 };
 </script>
 </body>
