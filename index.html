@@ -47,24 +47,8 @@
   <div id="debug" class="debug">App starting…</div>
 
   <div id="loginSection">
-    <div id="g_id_onload"
-         data-client_id="595304856426-pmat525kv5mechm7sj1g9eqs0cl2qec2.apps.googleusercontent.com"
-         data-context="signin"
-         data-ux_mode="popup"
-         data-callback="handleSignInWithGoogle"
-         data-nonce=""
-         data-auto_select="true"
-         data-itp_support="true"
-         data-use_fedcm_for_prompt="true">
-    </div>
-    <div class="g_id_signin"
-         data-type="standard"
-         data-shape="pill"
-         data-theme="outline"
-         data-text="signin_with"
-         data-size="large"
-         data-logo_alignment="left">
-    </div>
+    <div id="g_id_onload"></div>
+    <div id="google-button-container"></div>
   </div>
 
   <div id="userSection" class="hidden">
@@ -87,7 +71,7 @@ const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZi
 
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const sb = createClient(URL, KEY, {
-  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:false } // detectSessionInUrl is false now
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:false }
 });
 
 /* ------------------------------------------------------------------
@@ -169,36 +153,32 @@ async function safe(label, fn){
  ------------------------------------------------------------------ */
 let rawNonce = ""; // Store the raw nonce to verify against later
 
-async function generateNonce() {
-  const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
-  const encoder = new TextEncoder();
-  const data = encoder.encode(nonce);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hash));
-  const hashedNonce = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-  rawNonce = nonce; // Save the raw nonce
-  document.getElementById('g_id_onload').setAttribute('data-nonce', hashedNonce);
-}
-
 // Attach the callback to the window object to make it globally accessible
 window.handleSignInWithGoogle = async (response) => {
   log("Recieved credential from Google...");
-  await safe("signInWithIdToken", () =>
+  const { data, error } = await safe("signInWithIdToken", () =>
     sb.auth.signInWithIdToken({
       provider: 'google',
       token: response.credential,
       nonce: rawNonce // Pass the raw nonce for Supabase to verify
     })
   );
-  // After sign-in, generate a new nonce for the next potential login attempt
-  await generateNonce();
+
+  if (error) {
+    // If sign-in fails, don't leave the user in a broken state.
+    // Force a sign-out to clear any partial states.
+    await sb.auth.signOut();
+  }
 };
 
 /* ------------------------------------------------------------------
  NOTE OPERATIONS
 ------------------------------------------------------------------- */
 async function loadNotes(){
+  // 📌 FIX: Add a guard clause to prevent running if there's no user.
+  if (!currentUser) {
+    return;
+  }
   log("🔄 loadNotes()");
   const rows = await safe("loadNotes", signal =>
     sb.from("notes")
@@ -241,7 +221,6 @@ logoutBtn.onclick = async () => {
   log("➡️ logout click");
   const { error } = await sb.auth.signOut();
   if(error){ show(error.message,false); return; }
-  // No need for location.replace, UI will update via onAuthStateChange
 };
 
 saveBtn.onclick = saveNote;
@@ -255,27 +234,49 @@ pingBtn.onclick = () => safe("ping", signal =>
 sb.auth.onAuthStateChange(async (event, session) => {
   log("📢 " + event);
   currentUser = session?.user || null;
-  updateUI(); // Always update the UI on any auth change
+  updateUI();
 
-  // ONLY load notes when the user is first identified
-  if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+  // Load notes only when a user session is first established.
+  if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
     await loadNotes();
   }
 });
 
+
 /* ------------------------------------------------------------------
  INITIALIZATION
 ------------------------------------------------------------------- */
-await generateNonce(); // Generate the first nonce for the GSI button
+async function initializeGoogleSignIn() {
+  rawNonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
 
-const { data: { session } } = await sb.auth.getSession();
-// This initial check helps prevent the "flash" of the login button.
-// The onAuthStateChange listener above will handle the actual data loading.
-if (session) {
-  currentUser = session.user;
-  updateUI();
+  google.accounts.id.initialize({
+    client_id: '595304856426-pmat525kv5mechm7sj1g9eqs0cl2qec2.apps.googleusercontent.com',
+    callback: handleSignInWithGoogle,
+    nonce: rawNonce,
+    context: 'signin',
+    ux_mode: 'popup',
+    auto_select: true,
+    itp_support: true,
+  });
+
+  google.accounts.id.renderButton(
+    document.getElementById('google-button-container'),
+    { theme: 'outline', size: 'large', type: 'standard', shape: 'pill', text: 'signin_with', logo_alignment: 'left' }
+  );
+
+  google.accounts.id.prompt();
 }
-log("✅ initial UI state set");
+
+window.onload = async () => {
+  await initializeGoogleSignIn();
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    updateUI();
+  }
+  log("✅ App and Google Sign-In initialized.");
+};
 </script>
 </body>
 </html>
