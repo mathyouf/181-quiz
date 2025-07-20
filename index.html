@@ -3,96 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Minimal Supabase Auth</title>
+  <title>📝 Supabase Notes</title>
+
+  <!-- Supabase SDK (ES‑module, works on GitHub Pages) -->
+  <script type="module" crossorigin
+          src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"></script>
+
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      margin: 0;
-    }
-    .container {
-      max-width: 400px;
-      width: 100%;
-      background: #fff;
-      border-radius: 20px;
-      padding: 25px;
-      box-shadow: 0 12px 32px rgba(0,0,0,.25);
-      text-align: center;
-    }
-    h1 {
-      margin-bottom: 20px;
-      color: #333;
-    }
-    button {
-      width: 100%;
-      font-size: 16px;
-      padding: 14px;
-      border-radius: 10px;
-      border: none;
-      margin-bottom: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: .25s;
-    }
-    .btn-google {
-      background: #4285f4;
-      color: #fff;
-    }
-    .btn-google:hover {
-      background: #3367d6;
-    }
-    .btn-logout {
-      background: #dc3545;
-      color: #fff;
-    }
-    .btn-logout:hover {
-      background: #c82333;
-    }
-    .debug {
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 8px;
-      padding: 10px;
-      font: 14px/1.5 monospace;
-      white-space: pre-wrap;
-      height: 150px;
-      overflow-y: auto;
-      margin-top: 20px;
-      text-align: left;
-    }
-    .hidden {
-      display: none;
-    }
-    #status {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      padding: 6px;
-      text-align: center;
-      font-weight: 600;
-      color: #fff;
-      z-index: 50;
-      transition: opacity .3s;
-    }
-    #status.ok {
-      background: #28a745;
-    }
-    #status.err {
-      background: #dc3545;
-    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+         background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+         min-height:100vh;padding:20px}
+    .container{max-width:500px;margin:auto;background:#fff;border-radius:20px;
+               padding:25px;box-shadow:0 12px 32px rgba(0,0,0,.25)}
+    h1{text-align:center;margin-bottom:20px}
+    .debug{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
+           padding:10px;font:14px/1.5 monospace;white-space:pre-wrap;
+           height:200px;overflow-y:auto;margin-bottom:18px}
+    button,textarea{width:100%;font-size:16px;padding:14px;border-radius:10px;
+                    border:none;margin-bottom:12px}
+    button{font-weight:600;cursor:pointer;transition:.25s}
+    .btn-google{background:#4285f4;color:#fff}.btn-google:hover{background:#3367d6}
+    .btn-logout{background:#dc3545;color:#fff}
+    .btn-save{background:#28a745;color:#fff}
+    textarea{border:2px solid #dee2e6;min-height:160px;resize:vertical}
+    textarea:focus{outline:none;border-color:#4285f4}
+    #notesList .note{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
+                     padding:12px;margin-bottom:8px}
+    #notesList .meta{font-size:12px;color:#6c757d;margin-bottom:6px}
+    .hidden{display:none}
+    #status{position:fixed;top:0;left:0;right:0;padding:6px;text-align:center;
+            font-weight:600;color:#fff;z-index:50;transition:opacity .3s}
+    #status.ok{background:#28a745}#status.err{background:#dc3545}
   </style>
 </head>
 <body>
 <div id="status" class="hidden"></div>
 
 <div class="container">
-  <h1>Auth Test</h1>
+  <h1>📝 Notes App</h1>
   <div id="debug" class="debug">App starting…</div>
 
   <div id="loginSection">
@@ -100,128 +49,207 @@
   </div>
 
   <div id="userSection" class="hidden">
-    <p id="userInfo" style="margin-bottom:18px"></p>
+    <div id="userInfo" style="text-align:center;margin-bottom:18px"></div>
     <button id="logoutBtn" class="btn-logout">🚪 Logout</button>
+
+    <textarea id="noteText" placeholder="Write your note…"></textarea>
+    <button id="saveBtn" class="btn-save">💾 Save Note</button>
+    <button id="pingBtn" style="background:#17a2b8;color:#fff">🔍 Ping REST</button>
+
+    <div id="notesList"></div>
   </div>
 </div>
-
 <script type="module">
-  // FIX 1: Import createClient directly from the Supabase ESM CDN.
-  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+/* ------------------------------------------------------------------
+   SUPABASE CONFIG
+   ------------------------------------------------------------------
+   • We use the “anon” public key — NEVER embed the service‑role key
+     in client‑side code.
+   • detectSessionInUrl:true lets the SDK parse #access_token on login.
+   • persistSession:true stores the session in localStorage so a refresh
+     keeps the user signed‑in.
+------------------------------------------------------------------- */
+const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
+const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
 
-  const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co"; // REPLACE WITH YOUR SUPABASE PROJECT URL
-  const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK6JNGMZtuL_JKLVisDoUxXOrRkTkzupgpd_9IQrJ8"; // REPLACE WITH YOUR SUPABASE ANON PUBLIC KEY
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const sb = createClient(URL, KEY, {
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
+});
 
-  // --- Supabase Client Initialization (Standard Way) ---
-  const sb = createClient(URL, KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+/* ------------------------------------------------------------------
+   DOM HELPERS & LOGGING
+   ------------------------------------------------------------------ */
+const dbg    = document.getElementById("debug");
+const banner = document.getElementById("status");
+
+function log(msg){
+  dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
+  dbg.scrollTop    = dbg.scrollHeight;
+}
+function show(msg, ok){
+  banner.textContent = msg;
+  banner.className   = ok ? "ok" : "err";
+  banner.classList.remove("hidden");
+  setTimeout(()=>banner.classList.add("hidden"), 3000);
+}
+window.addEventListener("unhandledrejection", e =>
+  log("⚠️  " + (e.reason?.message || e.reason))
+);
+
+log("✅ Supabase client ready");
+
+/* ------------------------------------------------------------------
+   ELEMENT REFERENCES
+------------------------------------------------------------------- */
+const loginSec = document.getElementById("loginSection");
+const userSec  = document.getElementById("userSection");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn= document.getElementById("logoutBtn");
+const saveBtn  = document.getElementById("saveBtn");
+const pingBtn  = document.getElementById("pingBtn");
+const noteTxt  = document.getElementById("noteText");
+const list     = document.getElementById("notesList");
+const userInfo = document.getElementById("userInfo");
+
+/* ------------------------------------------------------------------
+   STATE + UI
+------------------------------------------------------------------- */
+let currentUser = null;
+function updateUI(){
+  if(currentUser){
+    loginSec.classList.add("hidden");
+    userSec.classList.remove("hidden");
+    userInfo.textContent = `Logged in as ${currentUser.email}`;
+  }else{
+    userSec.classList.add("hidden");
+    loginSec.classList.remove("hidden");
+    userInfo.textContent = "";
+    noteTxt.value        = "";
+    list.innerHTML       = "";
+  }
+}
+
+/* ------------------------------------------------------------------
+   safe(label, fn)  — CALL WRAPPER
+   ------------------------------------------------------------------
+   • Adds an 8‑second timeout so a stalled network call never hangs the UI.
+   • Automatically retries once if we hit a 401 during token refresh.
+   • Centralised error → always log + banner in one place.
+   ** ⚠️ Do NOT delete this wrapper. **
+------------------------------------------------------------------- */
+async function safe(label, fn){
+  const ctrl = new AbortController();
+  const t    = setTimeout(() => ctrl.abort(), 8000);
+  try{
+    let { data, error } = await fn(ctrl.signal);
+    if(error?.status === 401){
+      await sb.auth.refreshSession();
+      ({ data, error } = await fn(ctrl.signal));
+    }
+    if(error) throw error;
+    return data;
+  }catch(e){
+    log(`❌ ${label}: ${e.message}`);
+    show(e.message,false);
+  }finally{
+    clearTimeout(t);
+  }
+}
+
+/* ------------------------------------------------------------------
+   NOTE OPERATIONS
+------------------------------------------------------------------- */
+async function loadNotes(){
+  log("🔄 loadNotes()");
+  const rows = await safe("loadNotes", signal =>
+    sb.from("notes")
+      .select("*", { signal })
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending:false })
+  );
+  if(!rows) return;
+
+  list.innerHTML = "";
+  rows.forEach(r=>{
+    const div = document.createElement("div");
+    div.className = "note";
+    div.innerHTML = `
+      <div class="meta">${new Date(r.created_at).toLocaleString()}</div>
+      ${r.content}`;
+    list.appendChild(div);
+  });
+  log(`✅ loaded ${rows.length}`);
+}
+
+async function saveNote(){
+  const text = noteTxt.value.trim();
+  if(!text){ show("Write something!",false); return; }
+
+  await safe("insert", signal =>
+    sb.from("notes")
+      .insert({ user_id: currentUser.id, content: text }, { signal })
+      .select()
+  );
+  noteTxt.value = "";
+  show("Saved", true);
+  await loadNotes();
+}
+
+/* ------------------------------------------------------------------
+   EVENT HANDLERS
+------------------------------------------------------------------- */
+
+/* ---- Login ----
+   redirectTo: location.href is OK because Supabase parses the #fragment.
+*/
+loginBtn.onclick = () =>
+  sb.auth.signInWithOAuth({
+    provider: "google",
+    options : { redirectTo: location.href }
   });
 
-  // --- DOM Elements ---
-  let dbg, banner, loginSection, userSection, loginBtn, userInfo, logoutBtn;
+/* ---- Logout ----
+   We deliberately **reload** the app at a clean URL to:
+     • remove any lingering # / #access_token fragment
+     • start from a fresh state (clears memory leaks)
+   This is simpler and less error‑prone than trying to mutate history.
+   ** ⚠️ Do NOT remove the replace() call; otherwise # may persist. **
+*/
+logoutBtn.onclick = async () => {
+  log("➡️ logout click");
 
-  // --- Utility Functions ---
-  function log(msg) {
-    if (dbg) {
-      dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
-      dbg.scrollTop = dbg.scrollHeight;
-    } else {
-      console.log(`[Log] ${new Date().toLocaleTimeString()}: ${msg}`);
-    }
-  }
+  const { error } = await sb.auth.signOut();
+  if(error){ show(error.message,false); return; }
 
-  function show(msg, ok) {
-    if (banner) {
-      banner.textContent = msg;
-      banner.className = ok ? "ok" : "err";
-      banner.classList.remove("hidden");
-      setTimeout(() => banner.classList.add("hidden"), 3000);
-    } else {
-      console.warn(`[Status] ${ok ? 'OK' : 'ERR'}: ${msg}`);
-    }
-  }
+  window.location.replace(location.origin + location.pathname);
+};
 
-  // --- State ---
-  let currentUser = null;
+saveBtn.onclick = saveNote;
 
-  // --- UI Update Function ---
-  function updateUI() {
-    if (currentUser) {
-      loginSection.classList.add("hidden");
-      userSection.classList.remove("hidden");
-      userInfo.textContent = `Logged in as ${currentUser.email}`;
-      log(`UI: Showing user section for ${currentUser.email}`);
-    } else {
-      userSection.classList.add("hidden");
-      loginSection.classList.remove("hidden");
-      userInfo.textContent = "";
-      log("UI: Showing login section.");
-    }
-  }
+/* Optional network test */
+pingBtn.onclick = () => safe("ping", signal =>
+  sb.from("notes").select("id",{ head:true, signal }).limit(1)
+);
 
-  // --- Event Handlers ---
-  const handleLoginClick = () => {
-    log("➡️ Login button clicked. Initiating Google OAuth...");
-    sb.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.href }
-    })
-    .catch(error => {
-      log(`❌ Error during signInWithOAuth: ${error.message}`);
-      show(`Login failed: ${error.message}`, false);
-    });
-  };
+/* ------------------------------------------------------------------
+   AUTH LISTENER
+------------------------------------------------------------------- */
+sb.auth.onAuthStateChange(async (ev, sess) => {
+  log("📢 " + ev);
+  currentUser = sess?.user || null;
+  updateUI();
+  if(currentUser && ev !== "SIGNED_OUT") await loadNotes();
+});
 
-  const handleLogoutClick = async () => {
-    log("➡️ Logout button clicked. Attempting signOut...");
-    const { error } = await sb.auth.signOut();
-    if (error) {
-      log(`❌ Error during signOut: ${error.message}`);
-      show(`Logout failed: ${error.message}`, false);
-    } else {
-      // NOTE: A full page reload is a robust way to clear state.
-      // This is a good practice.
-      window.location.replace(window.location.origin + window.location.pathname);
-    }
-  };
-
-  // --- Supabase Auth State Listener ---
-  // FIX 2: Simplified the listener. It's cleaner and less redundant.
-  // The 'session' object is the single source of truth for the user's state.
-  sb.auth.onAuthStateChange((event, session) => {
-    log(`📢 Auth Event: ${event}`);
-    currentUser = session?.user ?? null;
-    updateUI();
-  });
-
-  // --- Initial Setup (runs after DOM is fully loaded) ---
-  document.addEventListener('DOMContentLoaded', async () => {
-    dbg = document.getElementById("debug");
-    banner = document.getElementById("status");
-    loginSection = document.getElementById("loginSection");
-    userSection = document.getElementById("userSection");
-    loginBtn = document.getElementById("loginBtn");
-    userInfo = document.getElementById("userInfo");
-    logoutBtn = document.getElementById("logoutBtn");
-
-    loginBtn.onclick = handleLoginClick;
-    logoutBtn.onclick = handleLogoutClick;
-
-    log("✅ DOM elements ready. Checking initial session...");
-
-    // This is a robust pattern: check the session on load to handle
-    // the redirect from Google and correctly set the initial UI state.
-    const { data: { session } } = await sb.auth.getSession();
-    currentUser = session?.user ?? null;
-    updateUI();
-    log("✅ Initial session check complete.");
-
-    // This is also a best practice: clean the URL after a successful login.
-    if (session && window.location.hash) {
-      log("🔍 Cleaning up URL hash after successful session detection.");
-      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
-    }
-  });
+/* ------------------------------------------------------------------
+   FIRST LOAD
+------------------------------------------------------------------- */
+const { data:{ session } } = await sb.auth.getSession();
+currentUser = session?.user || null;
+updateUI();
+if(currentUser) await loadNotes();
+log("✅ initial session ready");
 </script>
 </body>
 </html>
