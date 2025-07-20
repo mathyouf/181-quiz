@@ -5,25 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>📝 Supabase Notes</title>
 
-  <!-- Supabase SDK (ES‑module, works on GitHub Pages) -->
   <script type="module" crossorigin
           src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"></script>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-         min-height:100vh;padding:20px}
+        background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+        min-height:100vh;padding:20px}
     .container{max-width:500px;margin:auto;background:#fff;border-radius:20px;
-               padding:25px;box-shadow:0 12px 32px rgba(0,0,0,.25)}
+              padding:25px;box-shadow:0 12px 32px rgba(0,0,0,.25)}
     h1{text-align:center;margin-bottom:20px}
     .debug{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;
            padding:10px;font:14px/1.5 monospace;white-space:pre-wrap;
            height:200px;overflow-y:auto;margin-bottom:18px}
     button,textarea{width:100%;font-size:16px;padding:14px;border-radius:10px;
-                    border:none;margin-bottom:12px}
+                   border:none;margin-bottom:12px}
     button{font-weight:600;cursor:pointer;transition:.25s}
-    .btn-google{background:#4285f4;color:#fff}.btn-google:hover{background:#3367d6}
     .btn-logout{background:#dc3545;color:#fff}
     .btn-save{background:#28a745;color:#fff}
     textarea{border:2px solid #dee2e6;min-height:160px;resize:vertical}
@@ -35,6 +35,8 @@
     #status{position:fixed;top:0;left:0;right:0;padding:6px;text-align:center;
             font-weight:600;color:#fff;z-index:50;transition:opacity .3s}
     #status.ok{background:#28a745}#status.err{background:#dc3545}
+    /* Center the Google Button */
+    #loginSection{display:flex;justify-content:center}
   </style>
 </head>
 <body>
@@ -45,7 +47,24 @@
   <div id="debug" class="debug">App starting…</div>
 
   <div id="loginSection">
-    <button id="loginBtn" class="btn-google">🔐 Sign in with Google</button>
+    <div id="g_id_onload"
+         data-client_id="595304856426-pmat525kv5mechm7sj1g9eqs0cl2qec2.apps.googleusercontent.com"
+         data-context="signin"
+         data-ux_mode="popup"
+         data-callback="handleSignInWithGoogle"
+         data-nonce=""
+         data-auto_select="true"
+         data-itp_support="true"
+         data-use_fedcm_for_prompt="true">
+    </div>
+    <div class="g_id_signin"
+         data-type="standard"
+         data-shape="pill"
+         data-theme="outline"
+         data-text="signin_with"
+         data-size="large"
+         data-logo_alignment="left">
+    </div>
   </div>
 
   <div id="userSection" class="hidden">
@@ -61,31 +80,25 @@
 </div>
 <script type="module">
 /* ------------------------------------------------------------------
-   SUPABASE CONFIG
-   ------------------------------------------------------------------
-   • We use the “anon” public key — NEVER embed the service‑role key
-     in client‑side code.
-   • detectSessionInUrl:true lets the SDK parse #access_token on login.
-   • persistSession:true stores the session in localStorage so a refresh
-     keeps the user signed‑in.
-------------------------------------------------------------------- */
+ SUPABASE CONFIG
+ ------------------------------------------------------------------ */
 const URL = "https://pmceyfxrrbyipwmedfqc.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2V5ZnhycmJ5aXB3bWVkZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NzE2MDUsImV4cCI6MjA2ODE0NzYwNX0.CMhnfpuhB7V1CpC82kKDQoqRig--QEK5ItkFFol8seU";
 
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const sb = createClient(URL, KEY, {
-  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
+  auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:false } // detectSessionInUrl is false now
 });
 
 /* ------------------------------------------------------------------
-   DOM HELPERS & LOGGING
-   ------------------------------------------------------------------ */
+ DOM HELPERS & LOGGING
+ ------------------------------------------------------------------ */
 const dbg    = document.getElementById("debug");
 const banner = document.getElementById("status");
 
 function log(msg){
   dbg.textContent += `\n${new Date().toLocaleTimeString()}: ${msg}`;
-  dbg.scrollTop    = dbg.scrollHeight;
+  dbg.scrollTop   = dbg.scrollHeight;
 }
 function show(msg, ok){
   banner.textContent = msg;
@@ -100,11 +113,10 @@ window.addEventListener("unhandledrejection", e =>
 log("✅ Supabase client ready");
 
 /* ------------------------------------------------------------------
-   ELEMENT REFERENCES
+ ELEMENT REFERENCES
 ------------------------------------------------------------------- */
 const loginSec = document.getElementById("loginSection");
 const userSec  = document.getElementById("userSection");
-const loginBtn = document.getElementById("loginBtn");
 const logoutBtn= document.getElementById("logoutBtn");
 const saveBtn  = document.getElementById("saveBtn");
 const pingBtn  = document.getElementById("pingBtn");
@@ -113,7 +125,7 @@ const list     = document.getElementById("notesList");
 const userInfo = document.getElementById("userInfo");
 
 /* ------------------------------------------------------------------
-   STATE + UI
+ STATE + UI
 ------------------------------------------------------------------- */
 let currentUser = null;
 function updateUI(){
@@ -131,13 +143,8 @@ function updateUI(){
 }
 
 /* ------------------------------------------------------------------
-   safe(label, fn)  — CALL WRAPPER
-   ------------------------------------------------------------------
-   • Adds an 8‑second timeout so a stalled network call never hangs the UI.
-   • Automatically retries once if we hit a 401 during token refresh.
-   • Centralised error → always log + banner in one place.
-   ** ⚠️ Do NOT delete this wrapper. **
-------------------------------------------------------------------- */
+ safe(label, fn)  — CALL WRAPPER
+ ------------------------------------------------------------------ */
 async function safe(label, fn){
   const ctrl = new AbortController();
   const t    = setTimeout(() => ctrl.abort(), 8000);
@@ -158,7 +165,38 @@ async function safe(label, fn){
 }
 
 /* ------------------------------------------------------------------
-   NOTE OPERATIONS
+ GOOGLE SIGN-IN HANDLER & NONCE
+ ------------------------------------------------------------------ */
+let rawNonce = ""; // Store the raw nonce to verify against later
+
+async function generateNonce() {
+  const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
+  const encoder = new TextEncoder();
+  const data = encoder.encode(nonce);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  const hashedNonce = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  rawNonce = nonce; // Save the raw nonce
+  document.getElementById('g_id_onload').setAttribute('data-nonce', hashedNonce);
+}
+
+// Attach the callback to the window object to make it globally accessible
+window.handleSignInWithGoogle = async (response) => {
+  log("Recieved credential from Google...");
+  await safe("signInWithIdToken", () =>
+    sb.auth.signInWithIdToken({
+      provider: 'google',
+      token: response.credential,
+      nonce: rawNonce // Pass the raw nonce for Supabase to verify
+    })
+  );
+  // After sign-in, generate a new nonce for the next potential login attempt
+  await generateNonce();
+};
+
+/* ------------------------------------------------------------------
+ NOTE OPERATIONS
 ------------------------------------------------------------------- */
 async function loadNotes(){
   log("🔄 loadNotes()");
@@ -197,51 +235,47 @@ async function saveNote(){
 }
 
 /* ------------------------------------------------------------------
-   EVENT HANDLERS
+ EVENT HANDLERS
 ------------------------------------------------------------------- */
-
-/* ---- Login ----
-   redirectTo: location.href is OK because Supabase parses the #fragment.
-*/
-loginBtn.onclick = () =>
-  sb.auth.signInWithOAuth({
-    provider: "google",
-    options : { redirectTo: location.href }
-  });
-
-/* ---- Logout ----
-   We deliberately **reload** the app at a clean URL to:
-     • remove any lingering # / #access_token fragment
-     • start from a fresh state (clears memory leaks)
-   This is simpler and less error‑prone than trying to mutate history.
-   ** ⚠️ Do NOT remove the replace() call; otherwise # may persist. **
-*/
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
-
   const { error } = await sb.auth.signOut();
   if(error){ show(error.message,false); return; }
-
-  window.location.replace(location.origin + location.pathname);
+  // No need for location.replace, UI will update via onAuthStateChange
 };
 
 saveBtn.onclick = saveNote;
-
-/* Optional network test */
 pingBtn.onclick = () => safe("ping", signal =>
   sb.from("notes").select("id",{ head:true, signal }).limit(1)
 );
 
 /* ------------------------------------------------------------------
-   AUTH LISTENER
+ AUTH LISTENER
 ------------------------------------------------------------------- */
-sb.auth.onAuthStateChange(async (ev, sess) => {
-  log("📢 " + ev);
-  currentUser = sess?.user || null;
-  updateUI();
-  if(currentUser && ev !== "SIGNED_OUT") await loadNotes();
+sb.auth.onAuthStateChange(async (event, session) => {
+  log("📢 " + event);
+  currentUser = session?.user || null;
+  updateUI(); // Always update the UI on any auth change
+
+  // ONLY load notes when the user is first identified
+  if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+    await loadNotes();
+  }
 });
 
+/* ------------------------------------------------------------------
+ INITIALIZATION
+------------------------------------------------------------------- */
+await generateNonce(); // Generate the first nonce for the GSI button
+
+const { data: { session } } = await sb.auth.getSession();
+// This initial check helps prevent the "flash" of the login button.
+// The onAuthStateChange listener above will handle the actual data loading.
+if (session) {
+  currentUser = session.user;
+  updateUI();
+}
+log("✅ initial UI state set");
 </script>
 </body>
 </html>
