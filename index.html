@@ -242,14 +242,6 @@ sb.auth.onAuthStateChange(async (ev, sess) => {
   if(currentUser && ev !== "SIGNED_OUT") await loadNotes();
 });
 
-/* ------------------------------------------------------------------
-   FIRST LOAD
-------------------------------------------------------------------- */
-const { data:{ session } } = await sb.auth.getSession();
-currentUser = session?.user || null;
-updateUI();
-if(currentUser) await loadNotes();
-log("✅ initial session ready");
 </script>
 </body>
 </html>
