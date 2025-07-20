@@ -35,7 +35,6 @@
     #status{position:fixed;top:0;left:0;right:0;padding:6px;text-align:center;
             font-weight:600;color:#fff;z-index:50;transition:opacity .3s}
     #status.ok{background:#28a745}#status.err{background:#dc3545}
-    /* Center the Google Button */
     #loginSection{display:flex;justify-content:center}
   </style>
 </head>
@@ -47,7 +46,6 @@
   <div id="debug" class="debug">App starting…</div>
 
   <div id="loginSection">
-    <div id="g_id_onload"></div>
     <div id="google-button-container"></div>
   </div>
 
@@ -151,22 +149,21 @@ async function safe(label, fn){
 /* ------------------------------------------------------------------
  GOOGLE SIGN-IN HANDLER & NONCE
  ------------------------------------------------------------------ */
-let rawNonce = ""; // Store the raw nonce to verify against later
+let rawNonce = "";
 
-// Attach the callback to the window object to make it globally accessible
 window.handleSignInWithGoogle = async (response) => {
   log("Recieved credential from Google...");
-  const { data, error } = await safe("signInWithIdToken", () =>
+  
+  const result = await safe("signInWithIdToken", () =>
     sb.auth.signInWithIdToken({
       provider: 'google',
       token: response.credential,
-      nonce: rawNonce // Pass the raw nonce for Supabase to verify
+      nonce: rawNonce
     })
   );
 
-  if (error) {
-    // If sign-in fails, don't leave the user in a broken state.
-    // Force a sign-out to clear any partial states.
+  if (!result) {
+    log("Sign-in failed. Forcing a sign-out to clean up state.");
     await sb.auth.signOut();
   }
 };
@@ -175,10 +172,8 @@ window.handleSignInWithGoogle = async (response) => {
  NOTE OPERATIONS
 ------------------------------------------------------------------- */
 async function loadNotes(){
-  // 📌 FIX: Add a guard clause to prevent running if there's no user.
-  if (!currentUser) {
-    return;
-  }
+  if (!currentUser) return;
+
   log("🔄 loadNotes()");
   const rows = await safe("loadNotes", signal =>
     sb.from("notes")
@@ -219,8 +214,8 @@ async function saveNote(){
 ------------------------------------------------------------------- */
 logoutBtn.onclick = async () => {
   log("➡️ logout click");
-  const { error } = await sb.auth.signOut();
-  if(error){ show(error.message,false); return; }
+  await sb.auth.signOut();
+  location.reload();
 };
 
 saveBtn.onclick = saveNote;
@@ -236,7 +231,6 @@ sb.auth.onAuthStateChange(async (event, session) => {
   currentUser = session?.user || null;
   updateUI();
 
-  // Load notes only when a user session is first established.
   if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
     await loadNotes();
   }
@@ -247,12 +241,18 @@ sb.auth.onAuthStateChange(async (event, session) => {
  INITIALIZATION
 ------------------------------------------------------------------- */
 async function initializeGoogleSignIn() {
+  // 📌 FIX: Generate the raw nonce and the required SHA-256 hash.
   rawNonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
+  const encoder = new TextEncoder();
+  const data = encoder.encode(rawNonce);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  const hashedNonce = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
   google.accounts.id.initialize({
     client_id: '595304856426-pmat525kv5mechm7sj1g9eqs0cl2qec2.apps.googleusercontent.com',
     callback: handleSignInWithGoogle,
-    nonce: rawNonce,
+    nonce: hashedNonce, // Pass the HASHED nonce to Google
     context: 'signin',
     ux_mode: 'popup',
     auto_select: true,
